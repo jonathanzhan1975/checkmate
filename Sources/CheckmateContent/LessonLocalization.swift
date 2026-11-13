@@ -71,7 +71,7 @@ public final class LessonPackStore:@unchecked Sendable {
  /// Whether a translated-text file exists for this lesson, valid or not, so an invalid one can still be discarded.
  public func hasStoredText(source:LessonTranslation,locale:String)->Bool {FileManager.default.fileExists(atPath:url("text|\(source.fingerprint)|\(locale)").path)}
  public func translation(source:LessonTranslation,locale:String)throws->LessonTranslation? {
-  lock.lock();defer{lock.unlock()};let file=url("text|\(source.fingerprint)|\(locale)");guard FileManager.default.fileExists(atPath:file.path) else{return nil};let data=try safeRead(file,limit:2_000_000);let result:LessonTranslation;if let checkpoint=try? JSONDecoder().decode(LessonTextCheckpoint.self,from:data){guard checkpoint.version==1,checkpoint.sourceFingerprint==source.fingerprint,checkpoint.locale==locale else{throw CheckmateError.invalid(String(localized:"The stored translation is outdated.",bundle:.checkmate))};result=checkpoint.text}else{result=try LessonTranslation.decode(data)};try result.validate(against:source);return result
+  lock.lock();defer{lock.unlock()};let file=url("text|\(source.fingerprint)|\(locale)");guard FileManager.default.fileExists(atPath:file.path) else{return BundledLessonText.translation(source:source,locale:locale)};let data=try safeRead(file,limit:2_000_000);let result:LessonTranslation;if let checkpoint=try? JSONDecoder().decode(LessonTextCheckpoint.self,from:data){guard checkpoint.version==1,checkpoint.sourceFingerprint==source.fingerprint,checkpoint.locale==locale else{throw CheckmateError.invalid(String(localized:"The stored translation is outdated.",bundle:.checkmate))};result=checkpoint.text}else{result=try LessonTranslation.decode(data)};try result.validate(against:source);return result
  }
  public func saveTranslation(_ text:LessonTranslation,source:LessonTranslation,locale:String)throws {lock.lock();defer{lock.unlock()};guard LessonLanguages.valid(locale) else{throw CheckmateError.invalid(String(localized:"Choose a valid language identifier.",bundle:.checkmate))};try text.validate(against:source);try write(JSONEncoder().encode(LessonTextCheckpoint(sourceFingerprint:source.fingerprint,locale:locale,text:text)),to:url("text|\(source.fingerprint)|\(locale)"))}
  private func manifestURL(source:LessonTranslation,locale:String,voice:String)->URL {url("pack|\(source.fingerprint)|\(locale)|\(voice)|1")}
@@ -146,4 +146,45 @@ public final class LessonPackStore:@unchecked Sendable {
  public func discardTranslation(source:LessonTranslation,locale:String)throws {lock.lock();defer{lock.unlock()};try validateRoot();for voice in ["cedar","marin"]{try remove(source:source,locale:locale,voice:voice)};let text=url("text|\(source.fingerprint)|\(locale)");if FileManager.default.fileExists(atPath:text.path){try FileManager.default.removeItem(at:text)}}
  public func validatedPack(source:LessonTranslation,locale:String,voice:String)throws->(LessonPack,[String:URL])? {lock.lock();defer{lock.unlock()};guard let pack=try partialPack(source:source,locale:locale,voice:voice),pack.clips.count==source.beats.count else{return nil};var urls:[String:URL]=[:];for beat in source.beats{guard let file=try clipURL(pack:pack,beatID:beat.id) else{return nil};urls[beat.id]=file};return (pack,urls)}
  public func remove(source:LessonTranslation,locale:String,voice:String)throws {lock.lock();defer{lock.unlock()};try validateRoot();let file=manifestURL(source:source,locale:locale,voice:voice);if FileManager.default.fileExists(atPath:file.path){try FileManager.default.removeItem(at:file)};for beat in source.beats {let audio=url("audio|\(source.fingerprint)|\(locale)|\(voice)|\(beat.id)|1");if FileManager.default.fileExists(atPath:audio.path){try FileManager.default.removeItem(at:audio)}}}
+}
+
+/// A text-only overlay tied to the exact authored course. User-generated packs
+/// take precedence; updating the English source invalidates this bundled overlay.
+public enum BundledLessonText {
+    private struct Catalog: Decodable {
+        let version: Int
+        let locale: String
+        let sourceHash: String
+        let lessons: [LessonTranslation]
+        let labels: [String: String]
+    }
+
+    private static let catalog: Catalog? = {
+        let sourceURL = NativeResources.url("course.json")
+        let translationURL = NativeResources.url("course.zh-Hans.json")
+        guard let source = try? Data(contentsOf: sourceURL),
+              let data = try? Data(contentsOf: translationURL),
+              let catalog = try? JSONDecoder().decode(Catalog.self, from: data),
+              catalog.version == 1,
+              catalog.locale == "zh-Hans",
+              catalog.sourceHash == reviewHash(Data(String(decoding: source, as: UTF8.self).replacingOccurrences(of: "\r\n", with: "\n").utf8)),
+              Set(catalog.lessons.map(\.lessonID)).count == catalog.lessons.count else {
+            return nil
+        }
+        return catalog
+    }()
+
+    public static func translation(source: LessonTranslation, locale: String) -> LessonTranslation? {
+        guard locale == "zh-Hans",
+              let text = catalog?.lessons.first(where: { $0.lessonID == source.lessonID }),
+              (try? text.validate(against: source)) != nil else {
+            return nil
+        }
+        return text
+    }
+
+    public static func label(_ source: String, locale: String) -> String {
+        guard locale == "zh-Hans" else { return source }
+        return catalog?.labels[source] ?? source
+    }
 }

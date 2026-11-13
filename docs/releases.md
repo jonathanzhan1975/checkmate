@@ -1,8 +1,10 @@
 # Checkmate releases
 
 `Version.env` owns the native version and monotonically increasing build number.
-Version 0.9.3 is build 32.
-Version 0.9.3 targets macOS 14+ with universal Apple Silicon and Intel binaries.
+Version 0.10.0 is build 33 and marks the Simplified Chinese source preview.
+The GitHub prerelease currently contains source changes and the implementation plan. Mac compilation,
+XCTest, packaging, Chinese recordings and listening acceptance remain pending.
+The application continues to target macOS 14+ with universal Apple Silicon and Intel binaries.
 Build tooling runs on the build host with Xcode 27; this is separate from the runtime target.
 Development and release builds use
 separate application identifiers and data directories.

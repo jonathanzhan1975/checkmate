@@ -13,12 +13,12 @@ struct LessonSettingsPane:View {
     private var languages:[String] {
         LessonLanguages.supported.filter{search.isEmpty || name($0).localizedCaseInsensitiveContains(search) || $0.localizedCaseInsensitiveContains(search)}.sorted{name($0)<name($1)}
     }
-    private func name(_ code:String)->String {Locale(identifier:"en").localizedString(forIdentifier:code) ?? code}
+    private func name(_ code:String)->String {LessonLanguages.name(code)}
     private var audioConflict:Bool {coach.connected || coach.connecting}
     /// Play preview obeys the Narration switch and volume, like lesson narration; a muted preview says so instead of
     /// playing silently.
     private var narrationAudible:Bool {AudioPolicy.narrationAudible(session.state.settings)}
-    private var clipTitles:[String] {library.stepTitles.indices.contains(controller.selectedLesson) ? library.stepTitles[controller.selectedLesson]:[]}
+    private var clipTitles:[String] {library.stepTitles.indices.contains(controller.selectedLesson) ? library.stepTitles[controller.selectedLesson].map{BundledLessonText.label($0,locale:controller.language)}:[]}
     private func select(language:String?=nil,voice:String?=nil) {
         var settings=session.state.settings
         if let language,let normalized=LessonLanguages.normalizedSelection(language){settings.lessonLanguage=normalized;controller.language=normalized}
@@ -29,6 +29,12 @@ struct LessonSettingsPane:View {
     // lesson picker and list follow the course's sections.
     var body:some View {
         Section("Lesson language") {
+            Button("Use Simplified Chinese Courses") { select(language: "zh-Hans") }
+                .disabled(controller.busy)
+                .accessibilityIdentifier("use-chinese-courses")
+            Text("Chinese course text is included. Choose Simplified Chinese to read it offline; recordings can be generated separately.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             TextField("Search languages",text:$search).accessibilityIdentifier("lesson-language-search")
             Picker("Language",selection:Binding(get:{controller.language},set:{select(language:$0)})) {
                 ForEach(Array(Set(languages+[controller.language])).sorted{name($0)<name($1)},id:\.self){Text(name($0)).tag($0)}
@@ -39,7 +45,7 @@ struct LessonSettingsPane:View {
         }
         Section("Lessons") {
             Picker("Scope",selection:$controller.allLessons){Text("Selected lesson").tag(false);Text("All lessons").tag(true)}.disabled(controller.busy)
-            Picker("Lesson",selection:$controller.selectedLesson){ForEach(groups,id:\.lessons){group in Section(group.title){ForEach(group.lessons,id:\.self){Text(library.lessons[$0].title).tag($0)}}}}.disabled(controller.busy || controller.allLessons).accessibilityIdentifier("lesson-picker")
+            Picker("Lesson",selection:$controller.selectedLesson){ForEach(groups,id:\.lessons){group in Section(BundledLessonText.label(group.title,locale:controller.language)){ForEach(group.lessons,id:\.self){Text(BundledLessonText.label(library.lessons[$0].title,locale:controller.language)).tag($0)}}}}.disabled(controller.busy || controller.allLessons).accessibilityIdentifier("lesson-picker")
             if controller.language != "en"{lessonList}
         }
         Section("Translate and record") {
@@ -58,7 +64,7 @@ struct LessonSettingsPane:View {
             Text(controller.status).textSelection(.enabled).accessibilityIdentifier("lesson-job-status")
             if !controller.problems.isEmpty{VStack(alignment:.leading,spacing:Metrics.tightGap){ForEach(Array(controller.problems.enumerated()),id:\.offset){_,problem in Text(String(localized:"• \(problem)",bundle:.checkmate,comment:"One problem in a list")).textSelection(.enabled)}}.font(.caption).accessibilityElement(children:.contain).accessibilityLabel("Lesson job problems").accessibilityIdentifier("lesson-job-problems")}
             Text("Transcript verification compares the provider’s transcript with the requested script. Listen to the preview to judge spoken accuracy, clarity and suitability before recording the full lesson.").font(.caption).foregroundStyle(.secondary)
-            Text("A lesson uses the selected language after all its recordings are complete. Otherwise, the whole lesson plays in English.").font(.caption).foregroundStyle(.secondary)
+            Text("Translated text can be read before recordings are complete. Without a complete recording set, translated lessons play silently.").font(.caption).foregroundStyle(.secondary)
         }
         Section("Stored lessons") {
             Text(controller.storedStatus).font(.caption).foregroundStyle(.secondary)
@@ -93,7 +99,7 @@ struct LessonSettingsPane:View {
             Grid(alignment:.leading,horizontalSpacing:Metrics.smallGap,verticalSpacing:Metrics.tightGap) {
                 GridRow{Text("Lesson");ForEach(Self.statusColumns,id:\.self){Text($0)};Color.clear.gridCellUnsizedAxes([.horizontal,.vertical])}.font(.caption.bold()).foregroundStyle(.secondary).accessibilityHidden(true)
                 ForEach(groups,id:\.lessons){group in
-                    Text(group.title).sectionHeading(.caption.bold()).padding(.top,Metrics.tightGap).gridCellColumns(5)
+                    Text(BundledLessonText.label(group.title,locale:controller.language)).sectionHeading(.caption.bold()).padding(.top,Metrics.tightGap).gridCellColumns(5)
                     ForEach(group.lessons,id:\.self){lessonRow($0)}
                 }
             }.frame(maxWidth:.infinity,alignment:.leading)
@@ -102,7 +108,7 @@ struct LessonSettingsPane:View {
     private func lessonRow(_ index:Int)->some View {
         let lesson=library.lessons[index],status=controller.lessonStatuses.indices.contains(index) ? controller.lessonStatuses[index]:nil,idle = !controller.busy && !controller.planning
         return GridRow {
-            Text(lesson.title).lineLimit(1).truncationMode(.tail)
+            Text(BundledLessonText.label(lesson.title,locale:controller.language)).lineLimit(1).truncationMode(.tail)
             ForEach(Self.statusCells(status),id:\.column){cell in Text(cell.shown).accessibilityLabel(cell.column).accessibilityValue(cell.spoken).help(cell.help)}
             HStack(spacing:Metrics.tightGap) {
                 Button("Translate"){confirmLesson(index,"translate")}.disabled(!idle || status==nil || status?.translated==true)
@@ -127,10 +133,10 @@ struct LessonSettingsPane:View {
         confirm(String(localized:"Remove outdated translations?",bundle:.checkmate),String(localized:"This removes translated text and recordings made for earlier versions of these lessons, which this version can no longer use. Current translations, recordings and your progress are kept.",bundle:.checkmate),action:String(localized:"Remove",bundle:.checkmate)){controller.purgeOutdated()}
     }
     private func confirmDiscard(){
-        confirm(String(localized:"Discard translated text?",bundle:.checkmate),String(localized:"This removes cached translated text and its recordings for the chosen scope, so Translate can request fresh text. Your progress and bundled English lessons are kept.",bundle:.checkmate),action:String(localized:"Discard",bundle:.checkmate)){controller.discardTranslation()}
+        confirm(String(localized:"Discard translated text?",bundle:.checkmate),String(localized:"This removes custom translations and their recordings for the chosen scope. Built-in translations become available again. Your progress is kept.",bundle:.checkmate),action:String(localized:"Discard",bundle:.checkmate)){controller.discardTranslation()}
     }
     private func confirmRemoveClip(){
-        confirm(String(localized:"Remove clip \(clip+1)?",bundle:.checkmate),String(localized:"This removes one recording for the selected language, voice and lesson. Record / Resume then records only that clip again; until then the lesson plays in English.",bundle:.checkmate),action:String(localized:"Remove",bundle:.checkmate)){controller.removeClip(step:clip)}
+        confirm(String(localized:"Remove clip \(clip+1)?",bundle:.checkmate),String(localized:"This removes one recording for the selected language, voice and lesson. Record / Resume records it again. Translated text remains available without narration.",bundle:.checkmate),action:String(localized:"Remove",bundle:.checkmate)){controller.removeClip(step:clip)}
     }
     private func confirmRemove(){
         confirm(String(localized:"Remove stored lesson language?",bundle:.checkmate),String(localized:"This removes recordings for the selected language, voice and scope. Translated text, progress and bundled English lessons are kept.",bundle:.checkmate),action:String(localized:"Remove",bundle:.checkmate)){controller.remove()}

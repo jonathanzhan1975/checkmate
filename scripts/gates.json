@@ -696,7 +696,8 @@
     "scripts/gate_check.py",
     "Content/*",
     "scripts/test-fairness-inventory.py",
-    "Tools/host-access.swift"
+    "Tools/host-access.swift",
+    "scripts/test-chinese-localization.py"
    ]
   },
   {

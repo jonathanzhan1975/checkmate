@@ -1,0 +1,3 @@
+/* Simplified Chinese system permission prompts. */
+"NSMicrophoneUsageDescription" = "Checkmate 会将你说的话发送给 OpenAI，以便语音教练回答问题。仅在连接语音教练期间使用麦克风。";
+"NSLocalNetworkUsageDescription" = "Checkmate 需要在局域网中发现并连接对局。";

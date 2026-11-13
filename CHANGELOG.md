@@ -1,3 +1,28 @@
+# Checkmate 0.10.0 — Simplified Chinese source preview
+
+Build 33 introduces the first implementation of Simplified Chinese interface and course text.
+
+## Included
+
+- Add 2,585 Simplified Chinese catalog entries, including new settings and status messages.
+- Bundle Codex-translated text for 34 main lessons and five practice activities, covering 710 narration segments. Preserve course and segment identities, notation and authored mechanics.
+- Add interface language selection and a shortcut to choose Simplified Chinese courses.
+- Allow translated course text to be read before recordings are complete. Text-only lessons play silently, and damaged user text can fall back to valid bundled Chinese text.
+- Add Chinese system permission descriptions, resource validation and regression test sources.
+- Include the implementation plan and its verification status at the repository root.
+
+## Verification
+
+Chinese resource structure, notation, placeholders and source hashes passed static checks. Module-boundary checks and git diff whitespace checks passed. Original English catalog entries were preserved.
+
+Mac compilation, XCTest, package validation, interface layout and live Chinese speech have not been verified. This prerelease provides source code. A built or notarized Mac installer has not been produced.
+
+## Remaining work
+
+Additional practice, puzzle and training data still need full localization. DeepSeek runtime fallback, Chinese recording generation and listening checks remain pending. Existing local review templates are the basis for Chinese review explanations.
+
+Codex is the primary translation provider. DeepSeek is planned as a text-service backup.
+
 # Checkmate 0.9.3
 
 This release tidies the code behind 0.9.2, with a few changes a player can notice. Mini-game review finds its

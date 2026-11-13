@@ -88,12 +88,21 @@ if 'en.lproj/Localizable.stringsdict' not in expected:
 localized = resources.parent
 for tables in (localized, app / 'Contents/Resources'):
     shipped = {str(f.relative_to(tables)) for d in tables.glob('*.lproj') for f in d.rglob('*') if f.is_file()}
-    if shipped != expected:
+    expected_here = set(expected)
+    if tables == app / 'Contents/Resources':
+        expected_here.add('zh-Hans.lproj/InfoPlist.strings')
+        permission_text = tables / 'zh-Hans.lproj/InfoPlist.strings'
+        if permission_text.read_bytes() != (root / 'Sources/CheckmateCore/Resources/InfoPlist.zh-Hans.strings').read_bytes():
+            raise RuntimeError('Chinese permission descriptions differ from the source')
+    if shipped != expected_here:
         raise RuntimeError(f'Compiled String Catalog in {tables.relative_to(app)} is {sorted(shipped)}, not {sorted(expected)}')
     plurals = tables / 'en.lproj/Localizable.stringsdict'
     # The compiler writes the table as UTF-16, which Python 3.9's plistlib refuses; plutil reads it.
     if '%lld moves' not in plistlib.loads(subprocess.run(['plutil', '-convert', 'xml1', '-o', '-', str(plurals)], check=True, capture_output=True).stdout):
         raise RuntimeError(f'Plural variations missing: {plurals.relative_to(app)} lacks "%lld moves"')
+chinese_course = resources / 'course.zh-Hans.json'
+if chinese_course.read_bytes() != (root / 'Sources/CheckmateCore/Resources/course.zh-Hans.json').read_bytes():
+    raise RuntimeError('Packaged Chinese course differs from the source')
 course = json.loads((resources / 'course.json').read_text())
 if not (len(course['lessons']) == 39 and len(course['puzzles']) == 82):
     raise RuntimeError(f"Bundled course has {len(course['lessons'])} lessons and {len(course['puzzles'])} puzzles, not 39 and 82")

@@ -34,3 +34,6 @@ python3 scripts/test-run-gates.py
 python3 -I scripts/test-fresh-sources.py
 # Every engine and voice entry is classified for network-game fairness (LAN-play plan D8).
 python3 -I scripts/test-fairness-inventory.py > /dev/null
+
+# Chinese catalog and bundled course structural validation.
+python3 -I scripts/test-chinese-localization.py

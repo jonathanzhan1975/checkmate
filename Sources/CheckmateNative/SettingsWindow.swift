@@ -101,6 +101,7 @@ private struct SettingsForm:View {
         case .voice:
             VoiceSettingsContent(session:session,voice:voice,voiceAudio:voiceAudio,preview:preview,model:model)
         case .board:
+            InterfaceLanguageSettings()
             Section("Appearance"){Picker("Board theme",selection:session.binding(\.boardTheme)){ForEach(["wood","green","blue","neutral"],id:\.self){Text(AppSettings.themes[$0]!).tag($0)}}}
             Section("Animation"){Picker("Piece movement",selection:session.binding(\.pieceDuration)){Text("Off").tag(0);Text("Fast").tag(300);Text("Medium").tag(500);Text("Slow").tag(700)}}
         case .sound:
@@ -144,4 +145,36 @@ private struct SettingsForm:View {
     func toolbarDefaultItemIdentifiers(_ t:NSToolbar)->[NSToolbarItem.Identifier]{[.flexibleSpace,titleID,.flexibleSpace]}
     func toolbarAllowedItemIdentifiers(_ t:NSToolbar)->[NSToolbarItem.Identifier]{toolbarDefaultItemIdentifiers(t)}
     func toolbar(_ t:NSToolbar,itemForItemIdentifier id:NSToolbarItem.Identifier,willBeInsertedIntoToolbar:Bool)->NSToolbarItem?{let item=NSToolbarItem(itemIdentifier:id);item.view=titleLabel;item.isBordered=false;item.label=String(localized:"Settings",bundle:.checkmate);return item}
+}
+
+/// macOS selects both the main app's and SwiftPM bundle's language at launch.
+/// A restart applies the preference without interrupting a lesson or recording.
+private struct InterfaceLanguageSettings: View {
+    @State private var selection = UserDefaults.standard.string(forKey: "CheckmateInterfaceLanguage") ?? "system"
+
+    var body: some View {
+        Section {
+            Picker("Interface language", selection: $selection) {
+                Text("Follow System").tag("system")
+                Text(verbatim: "简体中文").tag("zh-Hans")
+                Text(verbatim: "English").tag("en")
+            }
+            .accessibilityIdentifier("interface-language")
+            .onChange(of: selection) { _, value in
+                let defaults = UserDefaults.standard
+                defaults.set(value, forKey: "CheckmateInterfaceLanguage")
+                if value == "system" {
+                    defaults.removeObject(forKey: "AppleLanguages")
+                } else {
+                    defaults.set([value], forKey: "AppleLanguages")
+                }
+            }
+        } header: {
+            Text("Language")
+        } footer: {
+            Text("Restart Checkmate to apply the interface language. Course and voice languages are selected separately.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
 }

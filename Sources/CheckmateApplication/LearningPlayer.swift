@@ -20,23 +20,41 @@ import Combine
     public weak var audio:NarrationService?
     public var packs:LessonPackStore? {didSet{reloadLocalizedPacks()}}
     private var localizedPacks:[Int:LessonPack]=[:],localizedURLs:[String:URL]=[:]
+    private var localizedTexts: [Int: LessonTranslation] = [:]
     private var loadedSelection=""
     @Published public private(set) var localizationLoading=false
-    public var fallbackMessage:String? {guard session.state.settings.lessonLanguage != "en" else{return nil};if localizationLoading{return String(localized:"Checking this lesson’s offline recordings…",bundle:.checkmate)};return localizedPacks[lessonIndex]==nil ? String(localized:"This lesson is playing in English because its selected language recording is incomplete or unavailable.",bundle:.checkmate):nil}
-    public var subtitle:String {localizedPacks[lessonIndex]?.translation.beats[step].say ?? beat.say}
-    public var teaches:[String] {localizedPacks[lessonIndex]?.translation.teaches ?? current.teaches ?? []}
-    public func localizedTitle(index:Int)->String {localizedPacks[index]?.translation.title ?? library.lessons[index].title}
-    public func localizedStepTitle(index:Int,step:Int)->String {localizedPacks[index]?.translation.beats[step].stepTitle ?? library.stepTitles[index][step]}
+    public var fallbackMessage:String? {guard session.state.settings.lessonLanguage != "en" else{return nil};if localizationLoading{return String(localized:"Checking this lesson’s offline recordings…",bundle:.checkmate)};if localizedTexts[lessonIndex] != nil,localizedPacks[lessonIndex]==nil{return String(localized:"Translated text is available. Narration is silent until all recordings for this lesson are ready.",bundle:.checkmate)};return localizedPacks[lessonIndex]==nil ? String(localized:"This lesson is playing in English because its selected language recording is incomplete or unavailable.",bundle:.checkmate):nil}
+    public var subtitle:String {localizedTexts[lessonIndex]?.beats[step].say ?? beat.say}
+    public var teaches:[String] {localizedTexts[lessonIndex]?.teaches ?? current.teaches ?? []}
+    public func localizedTitle(index:Int)->String {localizedTexts[index]?.title ?? library.lessons[index].title}
+    public func localizedStepTitle(index:Int,step:Int)->String {localizedTexts[index]?.beats[step].stepTitle ?? library.stepTitles[index][step]}
     private var packReloadTask:Task<Void,Never>?,packGeneration=UUID()
     private var authoredLessonActive:Bool {session.mode == .lesson && !mini && activePuzzle==nil && session.lesson?.mode=="lesson"}
     private func playbackIdentity(_ pack:LessonPack?)->String {guard let pack else{return String(localized:"English",bundle:.checkmate)};return pack.sourceFingerprint+"|"+pack.locale+"|"+pack.voice+"|"+pack.clips.sorted{$0.beatID<$1.beatID}.map{$0.beatID+":"+$0.audioHash}.joined(separator:"|")}
-    public func reloadLocalizedPacks(){let settings=session.state.settings,selection=settings.lessonLanguage+"|"+settings.lessonVoice,selectionChanged=selection != loadedSelection;let active=authoredLessonActive;if selectionChanged && active{rewind()};packReloadTask?.cancel();packGeneration=UUID();let generation=packGeneration;if selectionChanged{localizedPacks=[:];localizedURLs=[:]}else{dropPacksWithMissingRecordings(active:active)};loadedSelection=selection;guard settings.lessonLanguage != "en",let packs else{localizationLoading=false;if selectionChanged && active{rebuild()};return};let library=self.library
+    public func reloadLocalizedPacks(){let settings=session.state.settings,selection=settings.lessonLanguage+"|"+settings.lessonVoice,selectionChanged=selection != loadedSelection;let active=authoredLessonActive;if selectionChanged && active{rewind()};packReloadTask?.cancel();packGeneration=UUID();let generation=packGeneration;if selectionChanged{localizedPacks=[:];localizedURLs=[:];localizedTexts=[:]}else{dropPacksWithMissingRecordings(active:active)};loadedSelection=selection;guard settings.lessonLanguage != "en",let packs else{localizationLoading=false;if selectionChanged && active{rebuild()};return};let library=self.library
         // A rescan for the same selection (a job ended, a recording was removed) must not end a pending selection
         // change's loading early: only the scan that completes clears it.
         localizationLoading=selectionChanged || localizationLoading;if selectionChanged && active{rebuild()};packReloadTask=Task{[weak self] in
-        let worker=Task.detached{()->([Int:LessonPack],[String:URL]) in var found:[Int:LessonPack]=[:],urls:[String:URL]=[:];for index in library.lessons.indices {if Task.isCancelled{break};let source=LessonTranslation.source(library:library,index:index);if let (pack,files)=try? packs.validatedPack(source:source,locale:settings.lessonLanguage,voice:settings.lessonVoice){found[index]=pack;urls.merge(files){_,new in new}}};return (found,urls)}
+        let worker = Task.detached { () -> ([Int: LessonPack], [String: URL], [Int: LessonTranslation]) in
+            var found: [Int: LessonPack] = [:]
+            var urls: [String: URL] = [:]
+            var texts: [Int: LessonTranslation] = [:]
+            for index in library.lessons.indices {
+                if Task.isCancelled { break }
+                let source = LessonTranslation.source(library: library, index: index)
+                if let text = (try? packs.translation(source: source, locale: settings.lessonLanguage)) ?? BundledLessonText.translation(source: source, locale: settings.lessonLanguage) {
+                    texts[index] = text
+                }
+                if let (pack, files) = try? packs.validatedPack(source: source, locale: settings.lessonLanguage, voice: settings.lessonVoice) {
+                    found[index] = pack
+                    texts[index] = pack.translation
+                    urls.merge(files) { _, new in new }
+                }
+            }
+            return (found, urls, texts)
+        }
         let result=await withTaskCancellationHandler(operation:{await worker.value},onCancel:{worker.cancel()})
-        guard let self,!Task.isCancelled,self.packGeneration==generation else{return};let currentChanged=self.playbackIdentity(self.localizedPacks[self.lessonIndex]) != self.playbackIdentity(result.0[self.lessonIndex]);if currentChanged && self.authoredLessonActive{self.rewind()};self.objectWillChange.send();self.localizedPacks=result.0;self.localizedURLs=result.1;self.localizationLoading=false;if currentChanged && self.authoredLessonActive{self.rebuild()}
+        guard let self,!Task.isCancelled,self.packGeneration==generation else{return};let currentChanged=self.playbackIdentity(self.localizedPacks[self.lessonIndex]) != self.playbackIdentity(result.0[self.lessonIndex]) || self.localizedTexts[self.lessonIndex] != result.2[self.lessonIndex];if currentChanged && self.authoredLessonActive{self.rewind()};self.objectWillChange.send();self.localizedPacks=result.0;self.localizedURLs=result.1;self.localizedTexts=result.2;self.localizationLoading=false;if currentChanged && self.authoredLessonActive{self.rebuild()}
     }}
     /// Remove, Discard or a removed clip deletes recordings before the background rescan finishes. A lesson whose loaded
     /// pack lost a file falls back to English at once, so Play never reaches a deleted recording.
@@ -50,7 +68,7 @@ import Combine
     private var narrationSeconds:Double {localizedPacks[lessonIndex]?.clips.first(where:{$0.beatID==key})?.seconds ?? library.voices[lessonIndex][step].seconds}
     /// The narration settings the playing clip was started with; only a change that needs a restart restarts it.
     private var narrationApplied=(on:false,volume:0.0)
-    private func playNarration(){let settings=session.state.settings;narrationApplied=(settings.narration,settings.volume);if let url=localizedURLs[key],localizedPacks[lessonIndex] != nil{audio?.play(localURL:url,seconds:seconds,settings:settings)}else{audio?.play(file:library.voices[lessonIndex][step].file,seconds:seconds,settings:settings)};showPlaybackNotice(audio?.narrationFailure)}
+    private func playNarration(){let settings=session.state.settings;narrationApplied=(settings.narration,settings.volume);if let url=localizedURLs[key],localizedPacks[lessonIndex] != nil{audio?.play(localURL:url,seconds:seconds,settings:settings)}else if localizedTexts[lessonIndex] != nil{audio?.stop()}else{audio?.play(file:library.voices[lessonIndex][step].file,seconds:seconds,settings:settings)};showPlaybackNotice(audio?.narrationFailure)}
     /// The playback notice shown in `feedback` (a narration failure, or recordings still being checked); it is cleared
     /// when playback next starts cleanly, unless other feedback has replaced it since.
     private var playbackNotice:String?
@@ -430,6 +448,7 @@ import Combine
     private func rebuild(){
         if attemptStep{frame=attemptFrame;picked=attempt.selected.map{[$0]} ?? [];publish();return}
         do{frame=try library.frame(lesson:lessonIndex,step:step,seconds:seconds,duration:Double(session.state.settings.pieceDuration)/1000,narrationSeconds:narrationSeconds,useCues:localizedPacks[lessonIndex]==nil,staged:illustrationPlayed)}catch{feedback=String(localized:"The lesson illustration could not load.",bundle:.checkmate)}
+        frame.big = BundledLessonText.label(frame.big, locale: session.state.settings.lessonLanguage)
         if playing {
             var board=library.referenceFrames[lessonIndex][step].start.board ?? [:]
             let times=library.moveTimes(lesson:lessonIndex,step:step,narrationSeconds:narrationSeconds,pieceDuration:Double(session.state.settings.pieceDuration)/1000,useCues:localizedPacks[lessonIndex]==nil)
@@ -453,7 +472,7 @@ import Combine
         // Training shows only a library-opened mini-game from here; its library and exercises have their own controller.
         if session.mode == .training{if mini{publishTrainingMini()};return}
         // The library has no board or lesson of its own: whatever paused, it stays the library.
-        if session.activity.place == .puzzleLibrary{session.setLesson(LessonProjection(mode:"quick_puzzle",pieces:nil,title:String(localized:"Quick puzzles",bundle:.checkmate),lessonId:"puzzle-library",step:0,prompt:nil,choices:nil,playing:false,narrationActive:false,moving:false,turn:nil,winner:nil,rules:nil));return};let e=mini ? nil:exercise;session.setLesson(LessonProjection(mode:mini ? (miniKind == .pawnDuel ? "pawn_duel":"mini_game"):activePuzzle != nil ? "quick_puzzle":"lesson",pieces:frame.board,title:mini ? miniKind.title:activePuzzle?.title ?? current.title,lessonId:activePuzzle?.id ?? current.id,step:activePuzzle != nil ? 0:step,prompt:e?.prompt,choices:e?.kind=="choice" ? e?.choices:nil,playing:playing,narrationActive:narrationAudible,moving:frame.motion != nil,turn:mini ? miniTurn:attemptStep ? attempt.rules.turn:nil,winner:winner,rules:mini ? miniRules:nil,drawReason:mini ? miniGame?.drawReason:nil,attempt:attemptStep && !mini && e==nil ? attempt.projection:nil,learnerSide:mini ? miniLearnerSide:nil))}
+        if session.activity.place == .puzzleLibrary{session.setLesson(LessonProjection(mode:"quick_puzzle",pieces:nil,title:String(localized:"Quick puzzles",bundle:.checkmate),lessonId:"puzzle-library",step:0,prompt:nil,choices:nil,playing:false,narrationActive:false,moving:false,turn:nil,winner:nil,rules:nil));return};let e=mini ? nil:exercise;session.setLesson(LessonProjection(mode:mini ? (miniKind == .pawnDuel ? "pawn_duel":"mini_game"):activePuzzle != nil ? "quick_puzzle":"lesson",pieces:frame.board,title:mini ? miniKind.title:activePuzzle?.title ?? localizedTitle(index:lessonIndex),lessonId:activePuzzle?.id ?? current.id,step:activePuzzle != nil ? 0:step,prompt:e?.prompt,choices:e?.kind=="choice" ? e?.choices:nil,playing:playing,narrationActive:narrationAudible,moving:frame.motion != nil,turn:mini ? miniTurn:attemptStep ? attempt.rules.turn:nil,winner:winner,rules:mini ? miniRules:nil,drawReason:mini ? miniGame?.drawReason:nil,attempt:attemptStep && !mini && e==nil ? attempt.projection:nil,learnerSide:mini ? miniLearnerSide:nil))}
     /// The shown mini-game's rules, the same from its lesson and from the training library.
     private var miniRules:[String] {miniKind == .pawnDuel ? [String(localized:"Reach the far rank with a pawn, capture every opposing pawn, or leave the opponent without a move.",bundle:.checkmate),String(localized:"Pawns move forward and capture diagonally. A pawn on its starting rank may advance two empty squares.",bundle:.checkmate),Sentences.join(String(localized:"No en passant. Pawns stay pawns at the far rank.",bundle:.checkmate),MiniGameState.drawRules)]:[miniKind.rules]}
     /// The truthful training projection of a library-opened mini-game: the same board, rules and outcome as from its lesson.
