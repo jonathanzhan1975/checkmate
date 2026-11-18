@@ -14,7 +14,7 @@ import CheckmateCore
 /// (V-28). Silent: a voice double answers, and links are recorded instead of opened.
 @MainActor final class VoiceExperienceTests:XCTestCase {
     override func setUpWithError()throws{try isolateDataDirectory()}
-    private func model()throws->NativeModel {let model=try NativeModel();model.askVoiceConsent={_,reply in reply(.connect(autoConnect:false))};return model}
+    private func model()throws->NativeModel {let model=try NativeModel();var settings=model.session.state.settings;settings.coachProvider="openai";model.session.updateSettings(settings);model.askVoiceConsent={_,reply in reply(.connect(autoConnect:false))};return model}
     private func waitFor(_ what:String,_ condition:()->Bool)async throws {try await poll(what,tries:300,every:.milliseconds(10),condition)}
 
     /// Every action a failure offers goes to one place: System Settings, the Codex page, a Settings pane, or a retry.

@@ -33,6 +33,7 @@ struct MiniGameReviewSheet:View {
     let read:()->Void,close:()->Void
     /// Shows a fact's position on the board (by its index); nil where the board shown is not the reviewed game's.
     let show:((Int)->Void)?
+    var localCoach:DeepSeekCoach?=nil
     var body:some View {
         VStack(alignment:.leading,spacing:Metrics.sectionGap) {
             Text("\(ChineseContent.text(review.kind.title)) review").sectionHeading(.title2.bold())
@@ -45,7 +46,7 @@ struct MiniGameReviewSheet:View {
                 }
             }}
             if !review.complete {Text(MiniGameReviewWording.incomplete).font(.caption).foregroundStyle(.secondary)}
-            HStack {MiniGameReviewReadAloud(voice:voice,read:read);Spacer();Button("Done",action:close).keyboardShortcut(.defaultAction).accessibilityIdentifier("mini-review-done")}
+            HStack {if let localCoach{LocalMiniReviewReading(coach:localCoach,read:read)}else{MiniGameReviewReadAloud(voice:voice,read:read)};Spacer();Button("Done",action:close).keyboardShortcut(.defaultAction).accessibilityIdentifier("mini-review-done")}
         }.padding(Metrics.sectionGap*1.5).frame(minWidth:Self.minimumWidth,idealWidth:Self.minimumWidth,maxWidth:.infinity,alignment:.leading)
     }
     /// The sheet's window: it opens at its ideal size and the learner can make it larger, never narrower than its minimum.
@@ -88,5 +89,15 @@ struct MiniGameReviewReadAloud:View {
             Text(voice.checkingAvailability ? String(localized:"Checking your Codex sign-in…",bundle:.checkmate):String(localized:"Read Aloud checks your Codex sign-in first.",bundle:.checkmate)).font(.caption).foregroundStyle(.secondary)
             if let problem=voice.miniReviewProblem {Text(problem).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)}
         }
+    }
+}
+
+/// The default coach reads proved review facts locally, without a model request.
+private struct LocalMiniReviewReading:View {
+    @ObservedObject var coach:DeepSeekCoach
+    let read:()->Void
+    var body:some View {
+        if coach.speaking{Button("Stop Reading"){coach.stop()}.accessibilityIdentifier("mini-review-stop")}
+        else{Button("Read Aloud",action:read).accessibilityIdentifier("mini-review-read-aloud")}
     }
 }

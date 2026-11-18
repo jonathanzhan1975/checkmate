@@ -51,6 +51,7 @@ import CheckmateCore
     }
     func testVoiceIsSetUpOnlyThroughTheConsentQuestion()throws {
         let model=try NativeModel();defer{model.shutdown()}
+        var settings=model.session.state.settings;settings.coachProvider="openai";model.session.updateSettings(settings)
         var asked=0;model.askVoiceConsent={_,reply in asked+=1;reply(.cancel)}
         let flow=OnboardingFlow(model:model){}
         flow.setUpVoice()

@@ -14,7 +14,7 @@ import CheckmateCore
     override func setUpWithError()throws{try isolateDataDirectory()}
     /// A model whose consent sheet answers `answer` and counts how often it was shown.
     private func model(answer:VoiceConsentAnswer)throws->(NativeModel,()->Int) {
-        let model=try NativeModel();var asked=0
+        let model=try NativeModel();var settings=model.session.state.settings;settings.coachProvider="openai";model.session.updateSettings(settings);var asked=0
         model.askVoiceConsent={autoConnect,reply in asked+=1;XCTAssertEqual(autoConnect,model.session.state.settings.voiceAutoConnect,"the checkbox starts from the saved choice");reply(answer)}
         return (model,{asked})
     }

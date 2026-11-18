@@ -34,10 +34,10 @@ public struct VoiceInputDevice:Identifiable {public let id:String,name:String}
         guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject),&address,0,nil,&size)==noErr else{return []};var ids=[AudioDeviceID](repeating:0,count:Int(size)/MemoryLayout<AudioDeviceID>.size);guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject),&address,0,nil,&size,&ids)==noErr else{return []}
         return ids.compactMap{id in var streams=AudioObjectPropertyAddress(mSelector:kAudioDevicePropertyStreams,mScope:kAudioDevicePropertyScopeInput,mElement:kAudioObjectPropertyElementMain),bytes:UInt32=0;guard AudioObjectGetPropertyDataSize(id,&streams,0,nil,&bytes)==noErr,bytes>0 else{return nil};func text(_ selector:AudioObjectPropertySelector)->String?{var a=AudioObjectPropertyAddress(mSelector:selector,mScope:kAudioObjectPropertyScopeGlobal,mElement:kAudioObjectPropertyElementMain),value:Unmanaged<CFString>?;var n=UInt32(MemoryLayout<Unmanaged<CFString>?>.size);guard AudioObjectGetPropertyData(id,&a,0,nil,&n,&value)==noErr,let value else{return nil};return value.takeRetainedValue() as String};guard let uid=text(kAudioDevicePropertyDeviceUID),let name=text(kAudioObjectPropertyName) else{return nil};return VoiceInputDevice(id:uid,name:name)}
     }
-    public func startCapture(device:String) async throws {
+    public func startCapture(device:String,voiceProcessing:Bool=true) async throws {
         guard !NativePolicy.silent else{return};if capture?.isRunning==true,captureDevice==device{return};stopCapture();let epoch=captureGeneration
         let allowed=await AVCaptureDevice.requestAccess(for:.audio);guard epoch==captureGeneration else{throw CancellationError()};guard allowed else{throw VoiceFailure.microphoneDenied}
-        do{try startCapture(device:device,epoch:epoch,voiceProcessing:true);return}catch{NativeLog.voice.notice("Echo cancellation is unavailable; the coach takes turns with the microphone");stopCapture()}
+        if voiceProcessing{do{try startCapture(device:device,epoch:epoch,voiceProcessing:true);return}catch{NativeLog.voice.notice("Echo cancellation is unavailable; the coach takes turns with the microphone");stopCapture()}}
         try startCapture(device:device,epoch:captureGeneration,voiceProcessing:false)
     }
     private func startCapture(device:String,epoch:UUID,voiceProcessing:Bool) throws {

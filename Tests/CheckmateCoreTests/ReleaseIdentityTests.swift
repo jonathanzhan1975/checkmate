@@ -9,6 +9,11 @@ import CheckmateCore
 @testable import CheckmateMacPlatform
 
 final class ReleaseIdentityTests:XCTestCase {
+    func testDeepSeekPreviewKeepsAcceptedDevelopmentDataSeparate(){
+        let preview=ApplicationDataPaths.dataDirectoryIdentifier(bundleIdentifier:"ai.xiaolai.checkmate.deepseek-development")
+        XCTAssertEqual(preview,"ai.xiaolai.checkmate.deepseek-development")
+        XCTAssertNotEqual(preview,ApplicationDataPaths.dataDirectoryIdentifier(bundleIdentifier:"ai.xiaolai.checkmate.native-development"))
+    }
     func testReleaseUsesCompanionDiscoveryNamespace() {
         XCTAssertEqual(ApplicationDataPaths.dataDirectoryIdentifier(bundleIdentifier:"ai.xiaolai.checkmate"),"ai.xiaolai.checkmate")
     }

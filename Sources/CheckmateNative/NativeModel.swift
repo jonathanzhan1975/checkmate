@@ -6,6 +6,9 @@ import RealtimeConnection
 @MainActor final class NativeModel:ObservableObject {
     let session:GameSession,learning:LearningPlayer,audio:NativeAudio,store:StateStore
     let companion:CompanionBroker,voice:VoiceCoach
+    let deepSeekCoach:DeepSeekCoach
+    var deepSeekConsentPending=false
+    var askDeepSeekConsent: (@escaping (Bool)->Void)->Void=DeepSeekConsent.ask
     let voicePreview=VoicePreview()
     let usage:UsageLedger,lessonLanguages:LessonLanguageController
     let review=ReviewController()
@@ -90,8 +93,9 @@ import RealtimeConnection
         session=try GameSession(engine:engine,state:state,fairness:fairness);review.fairness=fairness;review.analyzer=reviewAnalyzer;reviewRetry=ReviewRetry(review:review,analyzer:reviewAnalyzer);network=try NetworkGameController(services:Self.networkServices(directory:store.directory),participation:fairness.participation,playerName:Self.defaultPlayerName);session.network=network;networkAssistant=NetworkAssistant(game:network,fairness:fairness,engine:engine);learning=try LearningPlayer(session:session);audio=NativeAudio(scores:learning.library.sounds);learning.audio=audio
         training=TrainingRolloutPolicy.enabled ? TrainingController(session:session,learning:learning):nil;training?.games.engine=engine;training?.games.fairness=fairness
         if TrainingRolloutPolicy.trainingVoiceEnabled,let training{trainingVoice=TrainingVoiceAdapter(session:session,controller:training)}else{trainingVoice=nil}
-        companion=try CompanionBroker(session:session,directory:store.directory.appendingPathComponent("companion"));voice=try VoiceCoach(session:session)
+        companion=try CompanionBroker(session:session,directory:store.directory.appendingPathComponent("companion"));voice=try VoiceCoach(session:session);deepSeekCoach=try DeepSeekCoach(session:session)
         usage=UsageLedger(directory:store.directory.appendingPathComponent("Usage"))
+        deepSeekCoach.usageLedger=usage;deepSeekCoach.attach(review:review,training:trainingVoice)
         if NativePolicy.silent,ProcessInfo.processInfo.environment["CHECKMATE_LESSON_FIXTURE"]=="1" {
             lessonLanguages=try LessonLanguageController(library:learning.library,directory:store.directory,usage:usage,translator:LessonAutomationTranslator(),recorder:LessonAutomationRecorder())
             lessonLanguages.cleanupPause = .seconds(2)
@@ -105,6 +109,8 @@ import RealtimeConnection
         reviewStore.onPurge={[weak self] id in Task{@MainActor in if self?.undoableDeletion?.id==id{self?.undoableDeletion=nil};do{try await self?.reviewAnalyzer.forgetAnalysis(documentID:id)}catch{NativeLog.storage.error("A purged review's analysis could not be removed: \(String(describing:error),privacy:.public)")}}}
         wireLessonLanguages();wireAgentTools();wirePersistence();wireSounds();loadSavedReviews();observeSession()
         voiceHelp.attach(self)
+        deepSeekCoach.objectWillChange.sink{[weak self] _ in self?.objectWillChange.send()}.store(in:&observations)
+        if state.settings.coachProvider=="deepseek",ProcessInfo.processInfo.environment["CHECKMATE_LESSON_FIXTURE"] != "1"{lessonLanguages.selectDeepSeekBackup(true)}
         // Views that hide engine output during a network game redraw when it begins or ends; a practice coach that
         // waited out the game (D8) reconnects once it ends, if Practice is on screen then.
         fairness.participation.observe{[weak self] role in self?.objectWillChange.send();if role==nil{DispatchQueue.main.async{self?.resumeVoiceIfIntended()}}}
@@ -146,6 +152,8 @@ import RealtimeConnection
     /// The review and training tools agents call, and when an agent may open a review.
     private func wireAgentTools(){
         session.reviewController=review;voice.attachReview(review);voice.attachMiniReview(learning.miniReview)
+        learning.miniReview.onChangeDeferred{[weak self] in self?.deepSeekCoach.stopLocalReviewReading()}.store(in:&observations)
+        network.miniReview.onChangeDeferred{[weak self] in self?.deepSeekCoach.stopLocalReviewReading()}.store(in:&observations)
         let reviewTools=ReviewTools(review:review,session:session,store:reviewStore,analyzer:reviewAnalyzer);reviewTools.onOpen={[weak self] document,saved in self?.openReview(document,saved:saved,stillWanted:{!Task.isCancelled}) ?? false};reviewTools.onPractice={[weak self] in self?.practiceFromReview()};companion.tools.reviewTools=reviewTools;self.reviewTools=reviewTools
         reviewTools.activityGeneration={[weak self] in self?.reviewOpenGeneration ?? -1}
         if let training{let tools=TrainingTools(session:session,controller:training);tools.onStart={[weak self] entry,resume in guard let self else{return false};let kind=training.catalog?.entry(entry)?.legacyKind;let next:Navigation=resume ? .trainingResume:kind.map{.trainingLegacy($0,restart:false)} ?? .trainingExercise(entry:entry);return self.navigate(next)};companion.tools.trainingTools=tools}
@@ -186,7 +194,7 @@ import RealtimeConnection
         session.$activity.removeDuplicates().dropFirst().sink{[weak self] _ in DispatchQueue.main.async{self?.resumeVoiceIfIntended()}}.store(in:&observations)
         // The banner observes this model; forward gate changes, and drop the paused sentence once the held game resumed or changed.
         session.$explicitResumeRequired.removeDuplicates().dropFirst().receive(on:RunLoop.main).sink{[weak self] held in guard let self=self else{return};self.objectWillChange.send();if !held,self.storageError==Self.failedRestorePausedMessage{self.storageError=Self.failedRestoreMessage}}.store(in:&observations)
-        session.$state.map(\.settings).removeDuplicates().dropFirst().receive(on:RunLoop.main).sink {[weak self] _ in guard let self else{return};self.syncLessonSelection();self.learning.settingsChanged();self.voice.settingsChanged()}.store(in:&observations)
+        session.$state.map(\.settings).removeDuplicates().dropFirst().receive(on:RunLoop.main).sink {[weak self] _ in guard let self else{return};self.syncLessonSelection();self.learning.settingsChanged();self.voice.settingsChanged();self.deepSeekCoach.settingsChanged()}.store(in:&observations)
         // A running lesson job keeps the language and voice it started with; the selection follows settings once it ends.
         lessonLanguages.$busy.removeDuplicates().filter{!$0}.receive(on:RunLoop.main).sink{[weak self] _ in self?.syncLessonSelection()}.store(in:&observations)
     }
@@ -202,7 +210,7 @@ import RealtimeConnection
     func setAway(_ value:Bool){guard value != away else{return};away=value
         // The session itself holds play, with or without the MCP broker; voice disconnects only once play is held.
         if companion.enabled{companion.suspend(value)}else{session.setConnection(enabled:false,role:session.companionRole,suspended:value)}
-        if value{rememberVoice();voice.disconnect();voicePreview.cancel()}else{resumeConnectionsIfDeferred();resumeVoiceIfIntended()}}
+        if value{deepSeekCoach.stop();rememberVoice();voice.disconnect();voicePreview.cancel()}else{resumeConnectionsIfDeferred();resumeVoiceIfIntended()}}
     /// D2: voice the learner had connected when it left Practice (or the app went away) reconnects when Practice is
     /// visible again, without a new greeting. Leaving while voice was off, or an MCP companion taking the session,
     /// leaves it off.
@@ -216,15 +224,16 @@ import RealtimeConnection
         return voice.history
     }
     /// Settings ▸ Voice Coach's Connect, a review's Connect Voice and the network page's Connect Voice Coach.
-    func connectVoice(){connectVoiceWithConsent{[weak self] in self?.voice.connect()}}
+    func connectVoice(){if usesDeepSeekCoach{deepSeekCoach.checkAvailability();return};connectVoiceWithConsent{[weak self] in self?.voice.connect()}}
     /// The control bar's Connect: the training game's coach in Training, otherwise Practice's (or a review's).
-    func connectPracticeVoice(){connectVoiceWithConsent{[weak self] in guard let self else{return};if session.mode == .training{voice.connectTraining()}else{voice.connect()}}}
+    func connectPracticeVoice(){if usesDeepSeekCoach{deepSeekCoach.checkAvailability();return};connectVoiceWithConsent{[weak self] in guard let self else{return};if session.mode == .training{voice.connectTraining()}else{voice.connect()}}}
     /// A finished mini-game review's Read Aloud (D5), with the sign-in check it may need, Check availability and Preview
     /// voice reach OpenAI too, so they ask the same question first.
-    func readMiniReviewAloud(){connectVoiceWithConsent{[weak self] in self?.voice.readMiniReviewAloudAfterSignIn()}}
-    func checkVoiceAvailability(){connectVoiceWithConsent{[weak self] in self?.voice.checkAvailability()}}
+    func readMiniReviewAloud(){if usesDeepSeekCoach{let reviewer=network.miniReview.sheetOpen ? network.miniReview:learning.miniReview;if let review=reviewer.review{deepSeekCoach.readFacts(review.facts.prefix(3).map(\.text).joined(separator:"\n"))};return};connectVoiceWithConsent{[weak self] in self?.voice.readMiniReviewAloudAfterSignIn()}}
+    func checkVoiceAvailability(){if usesDeepSeekCoach{deepSeekCoach.checkAvailability();return};connectVoiceWithConsent{[weak self] in self?.voice.checkAvailability()}}
     /// The selected voice is heard in its own preview session, never through the coach's conversation; a second press stops it.
     func previewVoice(){
+        if usesDeepSeekCoach{deepSeekCoach.readFacts(String(localized:"Hello. Let us look at this chess position together.",bundle:.checkmate));return}
         if voicePreview.playing{voicePreview.cancel();return}
         connectVoiceWithConsent{[weak self] in
             guard let self else{return};let settings=session.state.settings
@@ -239,6 +248,7 @@ import RealtimeConnection
     /// question comes first; Connect saves the agreement (and the launch choice) before connecting, Cancel changes
     /// nothing. Automatic connections never ask: they never run without the saved agreement.
     func connectVoiceWithConsent(_ connect:@escaping ()->Void){
+        guard !usesDeepSeekCoach else{deepSeekCoach.checkAvailability();return}
         guard !session.state.settings.voiceConsent else{connect();return}
         guard !askingVoiceConsent else{return}
         askingVoiceConsent=true
@@ -255,6 +265,7 @@ import RealtimeConnection
     private var claimsWhenVoiceLeft=0
     private func rememberVoice(){if !voice.networkSession,voice.miniReviewSession==nil,!voice.trainingSession,voice.connected || voice.connecting{voiceResumeIntent=true;claimsWhenVoiceLeft=session.companionClaims}}
     func resumeVoiceIfIntended(){
+        guard !usesDeepSeekCoach else{voiceResumeIntent=false;return}
         guard voiceResumeIntent,!away,!shuttingDown,voiceMayConnect else{return}
         if session.companionEnabled || session.companionClaims != claimsWhenVoiceLeft{voiceResumeIntent=false;return}
         // A recording or narration that blocks connecting keeps the intent; its end tries again.
@@ -265,7 +276,7 @@ import RealtimeConnection
     }
     private func syncLessonSelection(){guard !lessonLanguages.busy else{return};lessonLanguages.language=session.state.settings.lessonLanguage;lessonLanguages.voice=session.state.settings.lessonVoice}
     func startConnections(){
-        guard connectionStartup==nil,!NativePolicy.silent else{return}
+        guard !usesDeepSeekCoach,connectionStartup==nil,!NativePolicy.silent else{return}
         // Voice is judged by its own and the activity's generations (connectVoice); the broker's generation, which its
         // own start or an asynchronous listener failure moves, only decides whether MCP still starts.
         let activity=activityGeneration,voiceGeneration=voice.connectionGeneration,brokerGeneration=companion.connectionGeneration
@@ -859,7 +870,7 @@ import RealtimeConnection
     /// Why a practice fork did not start, before anything changed.
     private static var practiceForkFailure:String {String(localized:"Practice could not start from this position. The review is unchanged.",bundle:.checkmate)}
     func exportState(){let panel=Self.exportStatePanel();panel.begin {response in guard response == .OK,let url=panel.url else{return};do{try self.store.exportState(self.session.state,to:url)}catch{self.storageError=userFacingMessage(error,fallback:Self.exportFailure)}}}
-    func shutdown(){network.shutdown();lessonLanguages.shutdown();connectionStartup?.cancel();voicePreview.cancel();voiceResumeIntent=false;reviewTools.reset();supersedeReviewOpen();saveReview(immediate:true);shuttingDown=true;reviewSaveTask?.cancel();review.cancel();saveTask?.cancel();cancelMoveSounds();session.prepareShutdown();voice.disconnect();usage.flushForShutdown();companion.disable();learning.shutdown();audio.stopAll();session.cancelWork();try? store.save(session.state)}
+    func shutdown(){deepSeekCoach.stop();network.shutdown();lessonLanguages.shutdown();connectionStartup?.cancel();voicePreview.cancel();voiceResumeIntent=false;reviewTools.reset();supersedeReviewOpen();saveReview(immediate:true);shuttingDown=true;reviewSaveTask?.cancel();review.cancel();saveTask?.cancel();cancelMoveSounds();session.prepareShutdown();voice.disconnect();usage.flushForShutdown();companion.disable();learning.shutdown();audio.stopAll();session.cancelWork();try? store.save(session.state)}
 }
 /// Keeps the Save panel's suggested extension consistent with the chosen export contents.
 @MainActor final class ExportNaming:NSObject {

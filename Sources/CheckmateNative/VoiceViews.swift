@@ -23,7 +23,10 @@ struct VoiceCoachCard:View {
     @ObservedObject private var help:VoiceHelp
     init(voice:VoiceCoach,model:NativeModel){self.voice=voice;self.model=model;_help=ObservedObject(wrappedValue:model.voiceHelp)}
     private var idle:Bool {voice.connection == .disconnected && voice.history.isEmpty}
-    var body:some View {
+    @ViewBuilder var body:some View {
+        if model.usesDeepSeekCoach{DeepSeekCoachCard(coach:model.deepSeekCoach,help:model.voiceHelp,model:model)}else{legacyBody}
+    }
+    @ViewBuilder private var legacyBody:some View {
         Divider();Text("Voice Coach").sectionHeading()
         if idle {
             Text("Ask about this game out loud or in writing, and the coach answers about the position on the board.").fixedSize(horizontal:false,vertical:true)
@@ -78,7 +81,10 @@ struct VoiceSettingsContent:View {
         self.session=session;self.voice=voice;self.voiceAudio=voiceAudio;self.preview=preview;self.model=model
         _advanced=State(initialValue:Self.thinking(effort:session.state.settings.coachReasoningEffort)==nil)
     }
-    var body:some View {
+    @ViewBuilder var body:some View {
+        if model.usesDeepSeekCoach{DeepSeekSettingsContent(session:session,coach:model.deepSeekCoach)}else{legacyBody}
+    }
+    @ViewBuilder private var legacyBody:some View {
         let settings=session.state.settings,needs=Self.needs(voice.capability)
         if !needs.isEmpty {
             Section("What You Need"){

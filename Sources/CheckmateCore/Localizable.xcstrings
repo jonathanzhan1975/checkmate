@@ -30440,6 +30440,586 @@
           }
         }
       }
+    },
+    "Configure DEEPSEEK_API_KEY before asking the coach.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先在本机配置 DEEPSEEK_API_KEY，再向教练提问。"
+          }
+        }
+      }
+    },
+    "Live DeepSeek coaching is disabled during automation.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动测试期间不调用真实 DeepSeek 教练。"
+          }
+        }
+      }
+    },
+    "DeepSeek could not be reached. Check the connection and try again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂时无法连接 DeepSeek，请检查网络后重试。"
+          }
+        }
+      }
+    },
+    "The DeepSeek key is invalid. Check its configuration.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 密钥无效，请检查配置。"
+          }
+        }
+      }
+    },
+    "The DeepSeek balance is insufficient. Top up before asking again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 余额不足，请充值后再提问。"
+          }
+        }
+      }
+    },
+    "DeepSeek is busy. Wait a moment, then ask again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 当前繁忙，请稍后再提问。"
+          }
+        }
+      }
+    },
+    "DeepSeek could not answer this time. Try again later.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 本次未能回答，请稍后重试。"
+          }
+        }
+      }
+    },
+    "DeepSeek returned an incomplete answer. Ask again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 返回的回答不完整，请重新提问。"
+          }
+        }
+      }
+    },
+    "DeepSeek requested an invalid chess tool.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 请求的棋局工具参数无效，本次操作已拒绝。"
+          }
+        }
+      }
+    },
+    "Ask DeepSeek about the current position.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可以用中文向 DeepSeek 询问当前局面。"
+          }
+        }
+      }
+    },
+    "The position changed. Ask again about the new board.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "局面已经变化，请针对新棋盘重新提问。"
+          }
+        }
+      }
+    },
+    "The DeepSeek coach has stopped.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 教练已停止。"
+          }
+        }
+      }
+    },
+    "Listening in Chinese. Press Finish when you are done.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在听你说中文，说完后点击“说完了”。"
+          }
+        }
+      }
+    },
+    "Chinese speech recognition could not start. You can type your question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中文语音识别无法启动，你可以先打字提问。"
+          }
+        }
+      }
+    },
+    "Audio settings changed. Press the microphone to start again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频设置已变化，请点击麦克风重新开始。"
+          }
+        }
+      }
+    },
+    "DeepSeek is configured. Requests start only when you ask a question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 已配置；只有你提问时才会发起请求。"
+          }
+        }
+      }
+    },
+    "Reading the verified review with the system Mandarin voice.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用系统普通话声音朗读已验证的复盘内容。"
+          }
+        }
+      }
+    },
+    "Agree to send your question and board to DeepSeek first.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先同意将问题和当前棋盘发送给 DeepSeek。"
+          }
+        }
+      }
+    },
+    "DeepSeek coaching is available in local practice, reviews and supported training games.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 教练可用于本机练习、棋局复盘和已支持的训练对局。"
+          }
+        }
+      }
+    },
+    "DeepSeek is considering this position…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 正在分析当前局面…"
+          }
+        }
+      }
+    },
+    "DeepSeek took too long. Ask again when you are ready.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 回答超时，你可以稍后重新提问。"
+          }
+        }
+      }
+    },
+    "Stop the other coach session before asking DeepSeek.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先停止其他教练会话，再向 DeepSeek 提问。"
+          }
+        }
+      }
+    },
+    "DeepSeek answered. You can ask a follow-up question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 已回答，你可以继续追问。"
+          }
+        }
+      }
+    },
+    "The coach reached its analysis limit. Try a more specific question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本次分析已达到调用上限，请把问题问得更具体一些。"
+          }
+        }
+      }
+    },
+    "DeepSeek could not finish the answer. You can retry.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 未能完成回答，你可以重试。"
+          }
+        }
+      }
+    },
+    "The microphone device changed. Select a device and start speaking again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麦克风设备已变化，请选择设备后重新开始说话。"
+          }
+        }
+      }
+    },
+    "Microphone capture is disabled during automation.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动测试期间不启用麦克风录音。"
+          }
+        }
+      }
+    },
+    "Allow Speech Recognition in macOS Privacy & Security, or type your question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在 macOS“隐私与安全性”中允许语音识别，或先打字提问。"
+          }
+        }
+      }
+    },
+    "Chinese speech recognition is unavailable. You can type your question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中文语音识别暂不可用，你可以打字提问。"
+          }
+        }
+      }
+    },
+    "Speech could not be recognized. Try again or type your question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未能识别这次语音，请重说或打字提问。"
+          }
+        }
+      }
+    },
+    "Speech recognition timed out. Try again or type your question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音识别超时，请重试或打字提问。"
+          }
+        }
+      }
+    },
+    "A Mandarin system voice is unavailable. The answer remains available as text.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本机暂缺普通话系统声音，回答仍可作为文字阅读。"
+          }
+        }
+      }
+    },
+    "Ask the chess coach using DeepSeek?": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 DeepSeek 棋局教练？"
+          }
+        }
+      }
+    },
+    "Your question and the current board are sent to DeepSeek and charged to your API account. Chinese microphone input uses macOS speech recognition, which may use Apple servers when on-device recognition is unavailable. Replies use the system Mandarin voice. The microphone starts only when you press Speak.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的问题和当前棋盘将发送给 DeepSeek，并计入 API 账户用量。中文录音由 macOS 语音识别处理；设备不支持本地识别时可能使用 Apple 服务器。回答使用系统普通话声音播放。仅在你点击“说中文”时开启麦克风。"
+          }
+        }
+      }
+    },
+    "DeepSeek Chess Coach": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 棋局教练"
+          }
+        }
+      }
+    },
+    "Ask about the current position in Chinese. DeepSeek uses the board and local chess tools to guide you.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可以用中文询问当前局面，DeepSeek 会结合棋盘和本机棋局工具给出指导。"
+          }
+        }
+      }
+    },
+    "Ask DeepSeek…": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向 DeepSeek 提问…"
+          }
+        }
+      }
+    },
+    "Finish Speaking": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说完了"
+          }
+        }
+      }
+    },
+    "Speak Chinese": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说中文"
+          }
+        }
+      }
+    },
+    "Ask That Again": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新询问刚才的问题"
+          }
+        }
+      }
+    },
+    "DeepSeek API charges apply when you ask a question. Press Speak to interrupt playback and start a new question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提问时会产生 DeepSeek API 用量。点击“说中文”可以打断播放并开始新的问题。"
+          }
+        }
+      }
+    },
+    "Clear Conversation": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清空对话"
+          }
+        }
+      }
+    },
+    "Answer model": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回答模型"
+          }
+        }
+      }
+    },
+    "DeepSeek is the default chess reasoning service. Questions are sent only when you ask; there is no automatic provider fallback.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认使用 DeepSeek 分析棋局，只在你提问时发送请求，不会自动切换回答服务。"
+          }
+        }
+      }
+    },
+    "Check Configuration": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检查配置"
+          }
+        }
+      }
+    },
+    "Read DeepSeek Answers Aloud": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "朗读 DeepSeek 的回答"
+          }
+        }
+      }
+    },
+    "Mandarin speech uses the macOS system voice. Microphone recognition uses macOS Speech; on-device recognition is preferred when available.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "普通话播放使用 macOS 系统声音。麦克风录音使用 macOS 语音识别，支持时优先在本机处理。"
+          }
+        }
+      }
+    },
+    "Preview Mandarin Voice": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "试听普通话声音"
+          }
+        }
+      }
+    },
+    "Hello. Let us look at this chess position together.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你好，我们一起看看当前的国际象棋局面。"
+          }
+        }
+      }
+    },
+    "Recording and playback take turns to prevent echoes. Press Speak Chinese to interrupt the answer; press Finish Speaking to submit it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音和播放轮流进行，以避免回声。点击“说中文”打断回答，说完后点击“说完了”提交问题。"
+          }
+        }
+      }
+    },
+    "API access": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 配置"
+          }
+        }
+      }
+    },
+    "Configure DEEPSEEK_API_KEY on this Mac. The key stays outside saved games, conversations and exported language packs.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在本机配置 DEEPSEEK_API_KEY。密钥不会写入保存的对局、对话或导出的语言包。"
+          }
+        }
+      }
+    },
+    "Text tokens, speech-recognition time and speech-playback time are recorded separately in Usage.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字 token、语音识别时长和语音播放时长会在“用量”中分别记录。"
+          }
+        }
+      }
+    },
+    "Ask DeepSeek": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "询问 DeepSeek"
+          }
+        }
+      }
+    },
+    "The question or board context is too large. Try a shorter question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "问题或棋局资料过长，请缩短问题后重试。"
+          }
+        }
+      }
+    },
+    "DeepSeek returned an invalid or oversized answer. Try a more specific question.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 返回的回答无效或过长，请把问题问得更具体一些。"
+          }
+        }
+      }
+    },
+    "Send": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送"
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

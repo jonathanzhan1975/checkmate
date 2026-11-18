@@ -83,7 +83,7 @@ extension ControlBarModel {
         if session.mode == .network {return networkBar(network)}
         if session.mode == .practice {return practiceBar(session,voice:voice)}
         if learning.mini {return miniBar(learning)}
-        if session.mode == .training,let training {var bar=trainingBar(training,session:session);if trainingVoice,case .training=session.activity.place,training.exercise?.task == .game{bar.trailingGroups.insert(voiceControls(voice).items,at:0)};return bar}
+        if session.mode == .training,let training {var bar=trainingBar(training,session:session);if trainingVoice,case .training=session.activity.place,training.exercise?.task == .game{bar.trailingGroups.insert(voiceControls(voice,deepSeek:session.state.settings.coachProvider=="deepseek").items,at:0)};return bar}
         if session.mode == .lesson {return lessonBar(learning)}
         if learning.activePuzzle != nil {
             return ControlBarModel(leading:[ControlBarItem(action:.puzzleLibrary,symbol:.library,label:String(localized:"Puzzle library",bundle:.checkmate))],trailing:learning.passed ? [ControlBarItem(action:.nextPuzzle,label:String(localized:"Next Puzzle",bundle:.checkmate),prominent:true)]:[ControlBarItem(action:.puzzleHint,label:learning.puzzleHints==0 ? String(localized:"Hint",bundle:.checkmate,comment:"Noun: ask for a hint"):String(localized:"Another Hint",bundle:.checkmate),enabled:learning.canHint),ControlBarItem(action:.skipPuzzle,label:String(localized:"Skip",bundle:.checkmate))])
@@ -128,7 +128,7 @@ extension ControlBarModel {
     }
 
     @MainActor private static func practiceBar(_ session:GameSession,voice:ControlBarVoice)->ControlBarModel {
-        let voiceGroup=voiceControls(voice)
+        let voiceGroup=voiceControls(voice,deepSeek:session.state.settings.coachProvider=="deepseek")
         if !session.presentationHidden,let d=session.demonstration {
             let count=d.lines[d.line].frames.count
             return ControlBarModel(status:.text(String(localized:"Demonstration · move \(d.ply) of \(max(0,count-1))",bundle:.checkmate)),centre:[
@@ -175,9 +175,9 @@ extension ControlBarModel {
 
     /// The voice coach's controls, the same beside the game and over a preview or demonstration: Cancel while it
     /// connects, Stop one click away while it is on, Disconnect in the microphone's menu.
-    private static func voiceControls(_ voice:ControlBarVoice)->(items:[ControlBarItem],status:String?) {
+    private static func voiceControls(_ voice:ControlBarVoice,deepSeek:Bool=false)->(items:[ControlBarItem],status:String?) {
         switch voice {
-        case .off(let reason):return ([ControlBarItem(action:.voiceConnect,symbol:.microphone,label:reason?.message ?? String(localized:"Connect voice coach",bundle:.checkmate),enabled:reason==nil)],nil)
+        case .off(let reason):return ([ControlBarItem(action:.voiceConnect,symbol:.microphone,label:reason?.message ?? (deepSeek ? String(localized:"Ask DeepSeek",bundle:.checkmate):String(localized:"Connect voice coach",bundle:.checkmate)),enabled:reason==nil)],nil)
         case .connecting(let status):return ([ControlBarItem(action:.voiceCancel,label:VoiceCoachControls.cancelTitle,detail:status)],String(localized:"Connecting voice coach",bundle:.checkmate))
         case .on(let microphone,let canStop):return ([
             ControlBarItem(action:.voiceStop,symbol:.stopSpeaking,label:String(localized:"Stop coach speaking",bundle:.checkmate),enabled:canStop),

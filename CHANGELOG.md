@@ -1,3 +1,9 @@
+# 本机开发预览：第二阶段 DeepSeek 中文棋局教练
+
+- 默认使用 DeepSeek，接入当前棋局和本机只读分析工具；增加中文语音识别、系统普通话朗读、停止、超时及独立用量记录。
+- 独立预览应用 `Checkmate-DeepSeek-Preview.app` 使用独立数据目录，保留 0.20 基线与原有进度。真实文字问答、中文界面授权流程、应用内中文识别及播放、停止播放、重启持久化均已完成本机核心验收；用户确认语音可用，个别系统声音发音按用户要求保持现状。
+- 完整 unit 门禁通过：1,939 项 XCTest，1,931 项通过、8 项既定可选跳过、0 失败，后续脚本检查通过。arm64 / x86_64 应用包检查通过。尚未穷举实体外设切换组合或执行全套正式发布门禁，未发布新的正式版本，也未改动 `v0.20.0` 基线标签。
+
 # Checkmate 0.20.0
 
 Build 34 records the completion and user acceptance of phase one of Simplified Chinese localization (2026-11-19).

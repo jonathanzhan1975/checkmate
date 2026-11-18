@@ -44,7 +44,7 @@ struct ReviewDetailContent:View {
             if !review.authoredBranches.isEmpty{DisclosureGroup(ReviewFormat.ideaListTitle(count:review.authoredBranches.count)){VStack(alignment:.leading,spacing:Metrics.tightGap){ForEach(review.authoredBranches,id:\.id){branch in let label=ReviewFormat.ideaLabel(d,branch);HStack{
                 Button(label){do{try review.openSavedBranch(branch.id)}catch{model.storageError=userFacingMessage(error,fallback:String(localized:"This imagined line could not be opened.",bundle:.checkmate))}}.buttonStyle(.link)
                 Spacer();Button("Delete",role:.destructive){do{try review.deleteBranch(branch.id);model.saveReview()}catch{model.storageError=userFacingMessage(error,fallback:String(localized:"This imagined line could not be deleted.",bundle:.checkmate))}}.controlSize(.small).accessibilityLabel("Delete imagined line: \(label)")}}}.padding(.top,Metrics.tightGap)}}
-            ReviewVoiceSection(voice:voice,connect:{[weak model] in model?.connectVoice()})
+            if model.usesDeepSeekCoach{DeepSeekCoachCard(coach:model.deepSeekCoach,help:model.voiceHelp,model:model)}else{ReviewVoiceSection(voice:voice,connect:{[weak model] in model?.connectVoice()})}
             // The review control bar has no way back to the game, and the workspace hides it.
             Button("Return to Game"){model.returnToGame()}.buttonStyle(.bordered)
         }

@@ -26,6 +26,7 @@ let package = Package(
         .executableTarget(name: "CheckmateNative", dependencies: ["CheckmateCore", .product(name: "RealtimeConnection", package: "sayso")]),
         .executableTarget(name: "CheckmateAcceptance", dependencies: ["CheckmateCore", .product(name: "SaidGuard", package: "sayso")], path: "Tools/Acceptance"),
         .executableTarget(name: "CheckmateChineseNarration", dependencies: ["CheckmateDomain", "CheckmateContent", "CheckmateSupport", "CheckmateAssets"], path: "Tools/ChineseNarration"),
+        .executableTarget(name: "CheckmateDeepSeekAcceptance", dependencies: ["CheckmateCore"], path: "Tools/DeepSeekAcceptance"),
         // Mini-game calibration (WI-016): plays Domain's search and reference players only, on the test host.
         .executableTarget(name: "CheckmateMiniGameCalibration", dependencies: ["CheckmateDomain"], path: "Tools/MiniGameCalibration"),
         // Standard-rule calibration (WI-020): plays the opponent levels with the bundled Stockfish, on the test host.

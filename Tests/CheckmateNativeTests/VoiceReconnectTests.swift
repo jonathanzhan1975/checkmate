@@ -13,7 +13,7 @@ import CheckmateCore
 @MainActor final class VoiceReconnectTests:XCTestCase {
     override func setUpWithError()throws{try isolateDataDirectory()}
     private func model()throws -> (NativeModel,() -> Int) {
-        let model=try NativeModel();var reconnects=0;model.reconnectVoice={reconnects+=1};return (model,{reconnects})
+        let model=try NativeModel();var settings=model.session.state.settings;settings.coachProvider="openai";model.session.updateSettings(settings);var reconnects=0;model.reconnectVoice={reconnects+=1};return (model,{reconnects})
     }
     private func connectVoice(_ model:NativeModel)throws {_ = try model.session.openVoice();model.voice.receive(["type":"session.updated"]);XCTAssertTrue(model.voice.connected,"fixture: voice is connected")}
     private func settle()async throws {try await Task.sleep(for:.milliseconds(50))}

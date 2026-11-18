@@ -15,7 +15,7 @@ struct TrainingPanel:View {
             ForEach(definition.rules,id:\.self){Text($0).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)}
             if scenario.drill != nil {Text(scenario.budget.map{String(localized:"Moves: \(exercise.movesUsed) of \($0)",bundle:.checkmate)} ?? String(localized:"Moves: \(exercise.movesUsed)",bundle:.checkmate)).accessibilityIdentifier("training-moves")}
             answerControls(exercise)
-            if exercise.task == .game {gameControls(exercise);if model.voice.training != nil{TrainingVoiceCoach(voice:model.voice,connect:{[weak model] in model?.connectVoiceWithConsent{model?.voice.connectTraining()}})}}
+            if exercise.task == .game {gameControls(exercise);if model.usesDeepSeekCoach{DeepSeekCoachCard(coach:model.deepSeekCoach,help:model.voiceHelp,model:model)}else if model.voice.training != nil{TrainingVoiceCoach(voice:model.voice,connect:{[weak model] in model?.connectVoiceWithConsent{model?.voice.connectTraining()}})}}
             // A moment retried from a finished guided game leads back to that game's review.
             if training.guidedReview != nil,scenario.check == .moment{Button("Back to Your Game"){training.returnToGuidedGame()}.accessibilityIdentifier("training-back-to-game")}
             // A finished attempt refuses a promotion, so its chooser is not offered.

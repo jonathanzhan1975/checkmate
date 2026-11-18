@@ -21,6 +21,8 @@ if info.get('CFBundleShortVersionString') != settings['CHECKMATE_VERSION'] or in
 microphone = info.get('NSMicrophoneUsageDescription')
 if not (isinstance(microphone, str) and microphone.strip()):
     raise RuntimeError('NSMicrophoneUsageDescription missing: macOS would terminate the app when the voice coach opens the microphone')
+if not str(info.get("NSSpeechRecognitionUsageDescription", "")).strip():
+    raise RuntimeError("NSSpeechRecognitionUsageDescription missing for Chinese speech input")
 # The permission prompt must say where speech goes, as the voice consent sheet does.
 if 'OpenAI' not in microphone:
     raise RuntimeError('NSMicrophoneUsageDescription must say that speech is sent to OpenAI')

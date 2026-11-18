@@ -1,3 +1,4 @@
 /* Simplified Chinese system permission prompts. */
-"NSMicrophoneUsageDescription" = "Checkmate 会将你说的话发送给 OpenAI，以便语音教练回答问题。仅在连接语音教练期间使用麦克风。";
+"NSMicrophoneUsageDescription" = "DeepSeek 教练仅在你点击“说中文”时使用麦克风，由 macOS 识别中文；设备不支持本地识别时可能由 Apple 处理。可选的旧版 OpenAI 语音服务仅在你明确连接时接收音频。";
 "NSLocalNetworkUsageDescription" = "Checkmate 需要在局域网中发现并连接对局。";
+"NSSpeechRecognitionUsageDescription" = "Checkmate 仅在你点击“说中文”时使用 macOS 语音识别，将识别出的问题在你同意后发送给 DeepSeek。";

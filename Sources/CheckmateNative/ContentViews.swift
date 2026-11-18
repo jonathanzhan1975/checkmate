@@ -331,6 +331,7 @@ struct TransportContent:View {
     /// The bar's Connect, which asks for consent first (`NativeModel.connectPracticeVoice`).
     let connectVoice:()->Void
     var voiceState:ControlBarVoice {
+        if session.state.settings.coachProvider=="deepseek"{return .off(unavailable:session.fairness.engineHelpAllowed ? nil:.networkGame)}
         if voice.connecting{return .connecting(voice.status)}
         if voice.connected{return .on(microphone:session.state.settings.voiceMicrophone,canStop:voice.canStopTurn)}
         return .off(unavailable:session.mode == .training ? voice.trainingVoiceUnavailability:voice.practiceVoiceUnavailability)

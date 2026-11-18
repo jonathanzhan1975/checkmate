@@ -88,7 +88,7 @@ import CheckmateCore
         XCTAssertEqual(model.testBar(voice:.connecting("Asking for the microphone…")).status,.working("Connecting voice coach"),"the long progress goes to Cancel's tooltip")
         XCTAssertEqual(model.testBar(voice:.connecting("Asking for the microphone…")).item(.voiceCancel)?.detail,"Asking for the microphone…")
         XCTAssertEqual(model.testBar(voice:.off(unavailable:.companionConnected)).item(.voiceConnect)?.enabled,false)
-        XCTAssertEqual(model.testBar().item(.voiceConnect)?.label,"Connect voice coach")
+        XCTAssertEqual(model.testBar().item(.voiceConnect)?.label,"Ask DeepSeek")
     }
     /// B-17: Flip Board and Resign are one click from the practice bar, in its More menu; Resign only while the game
     /// is on. Every control's tooltip names its shortcut.

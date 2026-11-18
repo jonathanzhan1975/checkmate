@@ -46,6 +46,7 @@ import CheckmateCore
     /// V-3: asks the coach a typed question, connecting it first (without a greeting) when it is not connected.
     func ask(_ text:String){
         let question=text.trimmingCharacters(in:.whitespacesAndNewlines);guard !question.isEmpty,let model else{return}
+        if model.usesDeepSeekCoach{model.askDeepSeek(question);return}
         model.connectVoiceWithConsent{[weak self,weak model] in
             guard let self,let model else{return};let voice=model.voice
             if voice.connected{deliver(question);return}

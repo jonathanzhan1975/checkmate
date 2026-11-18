@@ -1,6 +1,8 @@
 import CheckmateAssets
 import Foundation
 public struct AppSettings:Codable,Equatable {
+    /// DeepSeek is the default reasoning provider; no automatic Codex fallback.
+    public var coachProvider="deepseek",deepSeekConsent=false,deepSeekSpeak=true
     public var coachReasoningEffort="minimal"
     public var coachVoice="cedar",voiceLanguage=(Bundle.checkmate.preferredLocalizations.first?.hasPrefix("zh")==true ? "zh":"en"),voiceAutoConnect=false,voiceMicrophone=true,voiceInputDevice="",voiceAssistMoves=false,voiceVolume=1.0
     /// The learner agreed, once, to what the voice coach sends to OpenAI. Nothing connects voice before it, on launch
@@ -44,6 +46,8 @@ public struct AppSettings:Codable,Equatable {
         func level(_ k:String,_ fallback:Double)->Double {guard let v=jsonNumber(raw[k])?.doubleValue else{return fallback};return max(0,min(1,v))}
         // A fresh value's defaults are the fallbacks, so a missing or invalid key reads exactly as a new setting.
         let d=AppSettings()
+        coachProvider=choice("coachProvider",["deepseek","openai"],d.coachProvider)
+        deepSeekConsent=flag("deepSeekConsent",d.deepSeekConsent);deepSeekSpeak=flag("deepSeekSpeak",d.deepSeekSpeak)
         coachReasoningEffort=choice("coachReasoningEffort",Self.reasoningEfforts,d.coachReasoningEffort)
         coachVoice=choice("coachVoice",Self.voices,d.coachVoice);voiceLanguage=choice("voiceLanguage",Array(Self.languages.keys),d.voiceLanguage)
         let locale=raw["lessonLanguage"] as? String ?? d.lessonLanguage

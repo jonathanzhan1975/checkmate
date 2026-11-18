@@ -315,6 +315,7 @@ import CheckmateCore
     /// this game's coach said, not Practice's conversation.
     func testPracticeVoiceWaitsForTheGameAndItsWordsStayOnPractice()async throws {
         let model=try NativeModel();defer{model.shutdown()}
+        var settings=model.session.state.settings;settings.coachProvider="openai";model.session.updateSettings(settings)
         model.practice();try model.voice.automationOpen();model.voice.receive(["type":"session.updated"])
         XCTAssertTrue(model.voice.connected);XCTAssertFalse(model.voice.networkSession)
         model.voice.receive(["type":"conversation.item.input_audio_transcription.completed","item_id":"practice-1","transcript":"How do knights move?"])

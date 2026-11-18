@@ -131,7 +131,8 @@
     "puzzleReviewDue"
    ],
    "inputs": [
-    "scripts/test-pointer.py", "scripts/sidebar_lessons.py",
+    "scripts/test-pointer.py",
+    "scripts/sidebar_lessons.py",
     "scripts/app_driver.py",
     "Sources/CheckmateNative/Review*.swift",
     "Sources/CheckmateNative/LibraryTableView.swift",
@@ -198,7 +199,8 @@
     "silent"
    ],
    "inputs": [
-    "scripts/test-lesson-remediation.py", "scripts/sidebar_lessons.py",
+    "scripts/test-lesson-remediation.py",
+    "scripts/sidebar_lessons.py",
     "scripts/app_driver.py",
     "Tools/ax-helper.swift",
     "Tools/pointer-helper.swift",
@@ -239,7 +241,8 @@
     "silent"
    ],
    "inputs": [
-    "scripts/test-lesson-exercise.py", "scripts/sidebar_lessons.py",
+    "scripts/test-lesson-exercise.py",
+    "scripts/sidebar_lessons.py",
     "scripts/app_driver.py",
     "Tools/ax-helper.swift",
     "Tools/pointer-helper.swift",
@@ -292,7 +295,17 @@
    "result": "rtl-results.json",
    "key": "rightToLeft",
    "prebuilt": true,
-   "requires": ["complete", "toolbarMirrored", "boardSquare", "boardKeptItsPlace", "sidebarOnTheRight", "detailsOnTheLeft", "titleCentred", "boardNotMirrored", "pointerMove"],
+   "requires": [
+    "complete",
+    "toolbarMirrored",
+    "boardSquare",
+    "boardKeptItsPlace",
+    "sidebarOnTheRight",
+    "detailsOnTheLeft",
+    "titleCentred",
+    "boardNotMirrored",
+    "pointerMove"
+   ],
    "inputs": [
     "scripts/test-rtl.py",
     "scripts/app_driver.py",
@@ -700,7 +713,8 @@
     "scripts/test-chinese-localization.py",
     "Tools/ChineseNarration/*",
     "Tools/translate-chinese-content.py",
-    "Tools/install-chinese-lessons.py"
+    "Tools/install-chinese-lessons.py",
+    "Tools/DeepSeekAcceptance/*"
    ]
   },
   {
