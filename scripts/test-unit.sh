@@ -11,11 +11,20 @@ xcrun swiftc Tools/legacy-store-test.swift -o "$evidence/legacy-store-test"
 "$evidence/legacy-store-test" Tools/legacy-export.js "$evidence/legacy-export.json"
 TMPDIR="$swiftpm_tmp" python3 scripts/fresh-sources.py .build -- swift build --build-tests > "$evidence/swift-build-tests.log" 2>&1
 bin=$(TMPDIR="$swiftpm_tmp" swift build --show-bin-path)
+# Native SwiftPM copies xcstrings without compiling them. Compile the same shipped catalog for tests,
+# including English plurals; otherwise tests silently exercise fallback keys instead of localized text.
+catalog_resources="$bin/Checkmate_CheckmateAssets.bundle/Resources"
+[[ -d "$bin/Checkmate_CheckmateAssets.bundle/Contents/Resources" ]] && catalog_resources="$bin/Checkmate_CheckmateAssets.bundle/Contents/Resources"
+xcrun xcstringstool compile Sources/CheckmateCore/Localizable.xcstrings --output-directory "$catalog_resources"
 runner=$(xcrun --find xctest)
 : > "$evidence/swift-tests.log"
+if [[ -d "$bin/CheckmatePackageTests.xctest" ]]; then
+  CHECKMATE_LEGACY_EXPORT="$evidence/legacy-export.json" CHECKMATE_AUTOMATION=1 "$runner" -XCTest All -AppleLanguages '(en)' -AppleLocale en_US "$bin/CheckmatePackageTests.xctest" >> "$evidence/swift-tests.log" 2>&1
+else
 for suite in CheckmateDomainTests CheckmateCoreTests CheckmateNativeTests CheckmateMCPTests; do
-  CHECKMATE_LEGACY_EXPORT="$evidence/legacy-export.json" CHECKMATE_AUTOMATION=1 "$runner" "$bin/$suite.xctest" >> "$evidence/swift-tests.log" 2>&1
+  CHECKMATE_LEGACY_EXPORT="$evidence/legacy-export.json" CHECKMATE_AUTOMATION=1 "$runner" -XCTest All -AppleLanguages '(en)' -AppleLocale en_US "$bin/$suite.xctest" >> "$evidence/swift-tests.log" 2>&1
 done
+fi
 python3 -I Tools/test-lesson-action-alignment.py
 python3 -I Tools/test-import-cedar.py
 python3 -I Tools/test-narration-coverage.py

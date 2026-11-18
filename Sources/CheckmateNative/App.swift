@@ -737,7 +737,36 @@ import CheckmateCore
     /// Waits until a transition reaches its end state, polling every 50 ms. The deadline only bounds liveness:
     /// the caller still asserts the state, so a transition that never arrives fails rather than passes.
     func settle(seconds:Double,_ done:()->Bool) async {let deadline=Date().addingTimeInterval(seconds);while !done() && Date()<deadline{try? await Task.sleep(for:.milliseconds(50))}}
-    func runFullscreen(directory:String){guard let game=game else{return};try? FileManager.default.createDirectory(atPath:directory,withIntermediateDirectories:true);Task{try? await Task.sleep(nanoseconds:500_000_000);game.window?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true);if game.window!.styleMask.contains(.fullScreen){game.window?.toggleFullScreen(nil);try? await Task.sleep(nanoseconds:2_000_000_000)};let normal=game.window!.frame;var frames:[[String:Any]]=[];game.window?.toggleFullScreen(nil);await settle(seconds:6){game.window!.styleMask.contains(.fullScreen) && game.window!.frame==game.window!.screen!.frame};let expected=[CGFloat(0),game.leftExtent,game.leftExtent+game.rightExtent,game.rightExtent,CGFloat(0)];for (index,(name,action)) in [("closed",{}),("left",{game.toggleLeft()}),("both",{game.toggleRight()}),("right",{game.toggleLeft()}),("closed-again",{game.toggleRight()})].enumerated(){action();await settle(seconds:5){abs(game.main.view.frame.width-(game.split.view.frame.width-expected[index]))<=1};frames.append(["phase":name,"window":NSStringFromRect(game.window!.frame),"split":NSStringFromRect(game.split.view.frame),"main":NSStringFromRect(game.main.view.frame),"windowWidth":game.window!.frame.width,"splitWidth":game.split.view.frame.width,"mainWidth":game.main.view.frame.width,"fullscreen":game.window!.styleMask.contains(.fullScreen)]);try? await game.capture(directory+"/fullscreen-"+name+".png")};game.window?.toggleFullScreen(nil);await settle(seconds:6){!game.window!.styleMask.contains(.fullScreen) && abs(game.window!.frame.width-normal.width)<=1 && abs(game.window!.frame.height-normal.height)<=1};let restored=game.window!.frame;let correct=abs(restored.width-normal.width)<=1 && abs(restored.height-normal.height)<=1;let geometryCorrect=frames.enumerated().allSatisfy{i,frame in guard let width=frame["windowWidth"] as? CGFloat,let split=frame["splitWidth"] as? CGFloat,let main=frame["mainWidth"] as? CGFloat else{return false};return abs(width-split)<=1 && abs(main-(split-expected[i]))<=1};try? JSONSerialization.data(withJSONObject:["passed":correct && geometryCorrect && (frames.first?["fullscreen"] as? Bool ?? false),"geometryCorrect":geometryCorrect,"restored":correct,"entered":frames.first?["fullscreen"] as? Bool ?? false,"frames":frames],options:.prettyPrinted).write(to:URL(fileURLWithPath:directory+"/fullscreen-results.json"));try? await game.capture(directory+"/normal-restored.png")}}
+    func runFullscreen(directory:String){
+        guard let game=game,let window=game.window else{return}
+        try? FileManager.default.createDirectory(atPath:directory,withIntermediateDirectories:true)
+        Task {
+            try? await Task.sleep(nanoseconds:500_000_000)
+            window.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
+            if window.styleMask.contains(.fullScreen){window.toggleFullScreen(nil);try? await Task.sleep(nanoseconds:2_000_000_000)}
+            let normal=window.frame;var frames:[[String:Any]]=[]
+            window.toggleFullScreen(nil)
+            await settle(seconds:6){window.styleMask.contains(.fullScreen) && window.frame==window.screen!.frame}
+            for (name,action) in [("closed",{}),("left",{game.toggleLeft()}),("both",{game.toggleRight()}),("right",{game.toggleLeft()}),("closed-again",{game.toggleRight()})] {
+                action()
+                // A pane's first reveal can install system glass chrome and need
+                // a second fit. Do not sample an intermediate animation frame.
+                await settle(seconds:5){!game.animating && abs(game.main.view.frame.width-(game.fixedBoardWidth?.constant ?? 0))<=1}
+                let panesCorrect=(game.sidebarItem.isCollapsed || abs(game.navigation.view.frame.width-Metrics.left)<=1) && (game.inspectorItem.isCollapsed || abs(game.inspector.view.frame.width-Metrics.right)<=1)
+                frames.append(["phase":name,"window":NSStringFromRect(window.frame),"split":NSStringFromRect(game.split.view.frame),"main":NSStringFromRect(game.main.view.frame),"windowWidth":window.frame.width,"splitWidth":game.split.view.frame.width,"mainWidth":game.main.view.frame.width,"requestedMainWidth":game.fixedBoardWidth?.constant ?? 0,"panesCorrect":panesCorrect,"settled":!game.animating,"fullscreen":window.styleMask.contains(.fullScreen)])
+                try? await game.capture(directory+"/fullscreen-"+name+".png")
+            }
+            window.toggleFullScreen(nil)
+            await settle(seconds:6){!window.styleMask.contains(.fullScreen) && abs(window.frame.width-normal.width)<=1 && abs(window.frame.height-normal.height)<=1}
+            let restored=window.frame,correct=abs(restored.width-normal.width)<=1 && abs(restored.height-normal.height)<=1
+            let geometryCorrect=frames.allSatisfy{frame in
+                guard let width=frame["windowWidth"] as? CGFloat,let split=frame["splitWidth"] as? CGFloat,let main=frame["mainWidth"] as? CGFloat,let requested=frame["requestedMainWidth"] as? CGFloat else{return false}
+                return abs(width-split)<=1 && abs(main-requested)<=1 && frame["panesCorrect"] as? Bool == true && frame["settled"] as? Bool == true && frame["fullscreen"] as? Bool == true
+            }
+            try? JSONSerialization.data(withJSONObject:["passed":correct && geometryCorrect,"geometryCorrect":geometryCorrect,"restored":correct,"entered":frames.first?["fullscreen"] as? Bool ?? false,"frames":frames],options:.prettyPrinted).write(to:URL(fileURLWithPath:directory+"/fullscreen-results.json"))
+            try? await game.capture(directory+"/normal-restored.png")
+        }
+    }
     func runScenario(directory:String){guard let game=game,let model=model else{return};try? FileManager.default.createDirectory(atPath:directory,withIntermediateDirectories:true)
         Task {try? await Task.sleep(nanoseconds:500_000_000);if game.window!.styleMask.contains(.fullScreen){game.window?.toggleFullScreen(nil);try? await Task.sleep(nanoseconds:2_000_000_000)};var failures:[String]=[];let initial=game.window!.frame
             let screen=game.window!.screen!.visibleFrame,initialBoard=game.board.boardRect

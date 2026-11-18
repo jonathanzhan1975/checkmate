@@ -5,7 +5,7 @@ let releaseSettings = try String(contentsOf: URL(fileURLWithPath: #filePath).del
 let minimumMacOS = releaseSettings.split(separator: "\n").first { $0.hasPrefix("CHECKMATE_MINIMUM_MACOS=") }!.split(separator: "=", maxSplits: 1)[1]
 let package = Package(
     name: "Checkmate",
-    // The String Catalog's source language; the app ships English only for now (CheckmateAssets holds the catalog).
+    // The String Catalog's source language; English and Simplified Chinese ship in CheckmateAssets.
     defaultLocalization: "en",
     platforms: [.macOS(String(minimumMacOS))],
     products: [.library(name: "CheckmateDomain", targets: ["CheckmateDomain"]), .library(name: "CheckmateApplication", targets: ["CheckmateApplication"]), .executable(name: "CheckmateMCP", targets: ["CheckmateMCP"]), .executable(name: "CheckmateNative", targets: ["CheckmateNative"]), .executable(name: "CheckmateAcceptance", targets: ["CheckmateAcceptance"])],
@@ -25,6 +25,7 @@ let package = Package(
         .target(name: "CheckmateCore", dependencies: ["CheckmateDomain", "CheckmateRules", "CheckmateEngine", "CheckmateContent", "CheckmateApplication", "CheckmateMacPlatform", "CheckmateSupport", "CheckmateAssets"], path: "Sources/CheckmateComposition"),
         .executableTarget(name: "CheckmateNative", dependencies: ["CheckmateCore", .product(name: "RealtimeConnection", package: "sayso")]),
         .executableTarget(name: "CheckmateAcceptance", dependencies: ["CheckmateCore", .product(name: "SaidGuard", package: "sayso")], path: "Tools/Acceptance"),
+        .executableTarget(name: "CheckmateChineseNarration", dependencies: ["CheckmateDomain", "CheckmateContent", "CheckmateSupport", "CheckmateAssets"], path: "Tools/ChineseNarration"),
         // Mini-game calibration (WI-016): plays Domain's search and reference players only, on the test host.
         .executableTarget(name: "CheckmateMiniGameCalibration", dependencies: ["CheckmateDomain"], path: "Tools/MiniGameCalibration"),
         // Standard-rule calibration (WI-020): plays the opponent levels with the bundled Stockfish, on the test host.

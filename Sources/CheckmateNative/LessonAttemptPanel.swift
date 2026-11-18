@@ -27,15 +27,15 @@ struct LessonAttemptPanel:View {
     var body:some View {
         VStack(alignment:.leading,spacing:Metrics.smallGap) {
             Text(headline).font(.headline).accessibilityIdentifier("lesson-attempt-status")
-            if let practice {Text(practice.goal).foregroundStyle(.secondary)}
+            if let practice {Text(ChineseContent.text(practice.goal,locale:learning.session.state.settings.lessonLanguage)).foregroundStyle(.secondary)}
             ForEach(Array(zip(practice?.checkpoints ?? [],attempt.judgement?.done ?? []).enumerated()),id:\.offset){_,item in
-                Label(item.0.label,systemImage:(item.1 ? AppSymbol.done:.markerOff).rawValue)
+                Label(ChineseContent.text(item.0.label,locale:learning.session.state.settings.lessonLanguage),systemImage:(item.1 ? AppSymbol.done:.markerOff).rawValue)
                     .foregroundStyle(item.1 ? Color.accentColor:Color.secondary)
-                    .accessibilityLabel(item.1 ? String(localized:"\(item.0.label), done",bundle:.checkmate,comment:"A lesson checkpoint that is done"):String(localized:"\(item.0.label), not done yet",bundle:.checkmate,comment:"A lesson checkpoint that is not done yet"))
+                    .accessibilityLabel(item.1 ? String(localized:"\(ChineseContent.text(item.0.label,locale:learning.session.state.settings.lessonLanguage)), done",bundle:.checkmate,comment:"A lesson checkpoint that is done"):String(localized:"\(ChineseContent.text(item.0.label,locale:learning.session.state.settings.lessonLanguage)), not done yet",bundle:.checkmate,comment:"A lesson checkpoint that is not done yet"))
             }
             if learning.playing,attempt.hasMoves {Text("The instruction describes the starting position; your game stays as it is.").font(.caption).foregroundStyle(.secondary)}
-            if let text=attempt.notice ?? attempt.judgement?.feedback {Text(text).textSelection(.enabled).accessibilityIdentifier("lesson-attempt-feedback")}
-            ForEach(Array(attempt.hints.enumerated()),id:\.offset){index,hint in Text("Hint \(index+1): \(hint)").foregroundStyle(.secondary)}
+            if let text=attempt.notice ?? attempt.judgement?.feedback {Text(ChineseContent.text(text,locale:learning.session.state.settings.lessonLanguage)).textSelection(.enabled).accessibilityIdentifier("lesson-attempt-feedback")}
+            ForEach(Array(attempt.hints.enumerated()),id:\.offset){index,hint in Text("Hint \(index+1): \(ChineseContent.text(hint,locale:learning.session.state.settings.lessonLanguage))").foregroundStyle(.secondary)}
             HStack {
                 if attempt.waitingToResume {Button("Resume"){attempt.resume()}.accessibilityIdentifier("lesson-attempt-resume")}
                 if attempt.phase == .achieved,attempt.judgement?.ending==nil {Button("Play On"){attempt.playOn()}.accessibilityIdentifier("lesson-attempt-play-on")}

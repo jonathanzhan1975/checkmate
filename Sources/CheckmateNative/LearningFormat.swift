@@ -9,10 +9,10 @@ struct PuzzleRowFormat:Equatable {
     }
     /// `markHelp`: the mark's tooltip, the puzzle's standing; nil without a mark.
     let title:String,detail:String,review:Bool,mark:Mark?,markHelp:String?,accessibilityValue:String
-    init(_ puzzle:Puzzle,record:PuzzleProgress) {
-        title=puzzle.title;detail="\(puzzle.topic) · \(puzzle.level)";review=record.review
+    init(_ puzzle:Puzzle,record:PuzzleProgress,locale:String?=nil) {
+        title=ChineseContent.text(puzzle.title,locale:locale);detail="\(ChineseContent.text(puzzle.topic,locale:locale)) · \(ChineseContent.text(puzzle.level,locale:locale))";review=record.review
         mark=record.solved ? .solved:record.countsAsSolved ? .notFirstTry:nil;markHelp=mark == nil ? nil:record.standing.title
-        accessibilityValue=([record.standing.title]+(record.review ? [String(localized:"to review",bundle:.checkmate,comment:"A puzzle queued for review, in its spoken description")]:[])+[puzzle.level]).joined(separator:", ")
+        accessibilityValue=([record.standing.title]+(record.review ? [String(localized:"to review",bundle:.checkmate,comment:"A puzzle queued for review, in its spoken description")]:[])+[ChineseContent.text(puzzle.level,locale:locale)]).joined(separator:", ")
     }
     /// The library heading: every solve, first time or not, and puzzles queued for review.
     static func heading(_ progress:[String:PuzzleProgress])->String {

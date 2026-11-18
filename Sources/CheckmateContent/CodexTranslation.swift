@@ -21,9 +21,13 @@ public struct TranslationResult: Sendable {
     }
 }
 public protocol LessonTranslationProvider: Sendable {
+    var providerID: String { get }
     func translate(source: LessonTranslation, locale: String,
                    onUsage: @escaping @Sendable (String, String, UsageTokens?) -> Void) async throws -> TranslationResult
     func accountStatus() async throws -> String
+}
+public extension LessonTranslationProvider {
+    var providerID: String { "codex" }
 }
 public enum CodexTranslationLimits {
     public static let responseBytes = 2_000_000
@@ -439,7 +443,9 @@ private final class CodexChannel: @unchecked Sendable {
         }
         let configuration = AppServerClient.Configuration(bin: executable.path, codexHome: home.path, environment: environment, timeout: rpcTimeout, clientName: "checkmate_lessons", workingDirectory: work.path, experimentalAPI: true, onEvent: { [weak self] _, event in self?.admit(event) })
         guard lock.withLock({ () -> Bool in if closed { return false }; starting = true; return true }) else { throw CancellationError() }
-        let outcome = await Result { try await Self.blocking { try AppServerClient.start(configuration) } }
+        let outcome: Result<AppServerClient, Error>
+        do { outcome = .success(try await Self.blocking { try AppServerClient.start(configuration) }) }
+        catch { outcome = .failure(error) }
         let closedMeanwhile = lock.withLock { () -> Bool in
             starting = false
             if !closed, case .success(let started) = outcome { client = started }

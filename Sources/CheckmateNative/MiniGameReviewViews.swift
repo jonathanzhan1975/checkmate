@@ -35,7 +35,7 @@ struct MiniGameReviewSheet:View {
     let show:((Int)->Void)?
     var body:some View {
         VStack(alignment:.leading,spacing:Metrics.sectionGap) {
-            Text("\(review.kind.title) review").sectionHeading(.title2.bold())
+            Text("\(ChineseContent.text(review.kind.title)) review").sectionHeading(.title2.bold())
             Text(MiniGameReviewWording.method).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             if review.facts.isEmpty {Text(MiniGameReviewWording.noFacts).accessibilityIdentifier("mini-review-none")}
             else {ForEach(Array(review.facts.enumerated()),id:\.offset){index,fact in
@@ -54,7 +54,7 @@ struct MiniGameReviewSheet:View {
     /// reaches the window only after its first layout.
     @MainActor static func window(_ sheet:MiniGameReviewSheet)->NSWindow {
         let host=NSHostingController(rootView:sheet);host.sizingOptions=[.minSize,.preferredContentSize]
-        let window=NSWindow(contentViewController:host);window.styleMask.insert(.resizable);window.title=String(localized:"\(sheet.review.kind.title) review",bundle:.checkmate,comment:"The title of a finished mini-game's review sheet")
+        let window=NSWindow(contentViewController:host);window.styleMask.insert(.resizable);window.title=String(localized:"\(ChineseContent.text(sheet.review.kind.title)) review",bundle:.checkmate,comment:"The title of a finished mini-game's review sheet")
         window.contentMinSize=NSSize(width:minimumWidth,height:window.contentMinSize.height)
         return window
     }

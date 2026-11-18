@@ -44,9 +44,9 @@ struct LibraryTable:NSViewRepresentable {
         init(_ library:ReviewLibraryController){
             self.library=library;focusRequests=library.listFocusRequests;openRow={[weak library] in library?.open($0)};super.init()
             // The table follows the controller's lines directly, as soon as they change, instead of waiting for SwiftUI's
-            // next view update (which a keystroke sometimes reached several frames late). The change is applied after
-            // the controller has finished publishing, never inside it.
-            observation=library.$shownVersion.dropFirst().receive(on:RunLoop.main).sink{[weak self] _ in guard let self else{return};self.apply(focusRequests:self.focusRequests)}
+            // next view update (which a keystroke sometimes reached several frames late).
+            // This event follows publication, so apply reads the committed version.
+            observation=library.linesDidChange.sink{[weak self] _ in guard let self else{return};self.apply(focusRequests:self.focusRequests)}
         }
         /// Brings the table to the controller's lines. Lines removed or inserted change with no animation; a line that
         /// stays but whose value changed is reloaded, as are the headers on screen (their state follows the search and

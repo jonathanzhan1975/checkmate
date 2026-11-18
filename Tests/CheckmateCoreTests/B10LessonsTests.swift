@@ -36,8 +36,8 @@ private actor B10Recorder:LessonRecordingProvider {
 private func b10Translated(_ source:LessonTranslation)->LessonTranslation {var text=source;text.beats=source.beats.map{var beat=$0;beat.say="FR "+beat.say;beat.speak="FR "+beat.speak;return beat};return text}
 
 @MainActor final class B10LessonsPlaybackTests:XCTestCase {
- /// LE-6: Remove deletes recordings before the background rescan ends; the open lesson must drop to English at once.
- func testRemovedRecordingsFallBackToEnglishBeforeTheRescanEnds()async throws {
+ /// Removing recordings keeps valid translated text and must never play deleted or English narration.
+ func testRemovedRecordingsKeepTranslatedTextBeforeTheRescanEnds()async throws {
   let dir=try scratchDirectory()
   let library=try CourseLibrary(),source=LessonTranslation.source(library:library,index:0),text=b10Translated(source),store=try LessonPackStore(directory:dir)
   try store.saveTranslation(text,source:source,locale:"fr")
@@ -47,9 +47,9 @@ private func b10Translated(_ source:LessonTranslation)->LessonTranslation {var t
   for _ in 0..<300 where player.localizationLoading{try await Task.sleep(for:.milliseconds(10))}
   player.openLesson(index:0);XCTAssertEqual(player.subtitle,text.beats[0].say);XCTAssertNil(player.fallbackMessage)
   try store.remove(source:source,locale:"fr",voice:"cedar");player.reloadLocalizedPacks()  // as Remove's onPacksChanged does
-  XCTAssertEqual(player.subtitle,source.beats[0].say,"The removed translation is not shown while the rescan runs")
+  XCTAssertEqual(player.subtitle,text.beats[0].say,"Removing audio preserves the valid translated text")
   XCTAssertNotNil(player.fallbackMessage);XCTAssertFalse(player.localizationLoading)
-  player.play();XCTAssertEqual(spy.local,0,"Play never reaches a deleted recording");XCTAssertEqual(spy.bundled,1)
+  player.play();XCTAssertEqual(spy.local,0,"Play never reaches a deleted recording");XCTAssertEqual(spy.bundled,0,"Text-only translation never plays unrelated English narration")
   player.shutdown()
  }
  /// LE-6: a same-selection rescan started during a language change keeps Play gated until a scan completes.

@@ -57,7 +57,8 @@ import CheckmateCore
         let shown=try XCTUnwrap(table.view(atColumn:0,row:2,makeIfNecessary:true) as? GameRowCell);XCTAssertEqual(shown.boundRow?.details,"One")
 
         library.publish(LibraryCatalog(library:nil,collections:[collection(one,"Uno",2),collection(three,"Three",1)]))
-        coordinator.apply(focusRequests:0)
+        // Publication itself updates the real table; no manual refresh or run-loop
+        // turn may be needed to observe the committed rows, version and selection.
         XCTAssertEqual(table.appliedIDs,["header:collection:"+one,"collection:\(one):0","collection:\(one):1","header:collection:"+three,"collection:\(three):0"])
         XCTAssertEqual(table.appliedVersion,library.shownVersion);XCTAssertEqual(table.numberOfRows,5)
         XCTAssertEqual((0..<5).map{coordinator.tableView(table,isGroupRow:$0)},[true,false,false,true,false])
@@ -85,10 +86,10 @@ import CheckmateCore
             return try XCTUnwrap(cell.subviews.compactMap{$0 as? HeaderButton}.first).isEnabled
         }
         XCTAssertTrue(try headerEnabled())
-        library.query="world";coordinator.apply(focusRequests:0)
+        library.query="world"
         XCTAssertEqual(table.appliedIDs,unsearched,"The search matches every championship game, so the lines are unchanged")
         XCTAssertFalse(try headerEnabled(),"Collapse is disabled while searching")
-        library.query="";coordinator.apply(focusRequests:0)
+        library.query=""
         XCTAssertEqual(table.appliedVersion,library.shownVersion);XCTAssertTrue(try headerEnabled(),"Collapse is enabled again once the search is cleared")
     }
 }

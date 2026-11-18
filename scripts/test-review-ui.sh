@@ -12,7 +12,9 @@ CHECKMATE_BUNDLE_ID=ai.xiaolai.checkmate.native-review-automation CHECKMATE_APP_
 xcrun swiftc Tools/ReviewScenario.swift -o "$checkmate_review_evidence/review-scenario-helper"
 "$checkmate_review_evidence/review-scenario-helper" "$checkmate_review_evidence" > "$checkmate_review_evidence/helper.log" 2>&1 &
 checkmate_helper_pid=$!
-CHECKMATE_AUTOMATION=1 build/CheckmateReviewAutomation.app/Contents/MacOS/CheckmateNative --automation --data-dir "$checkmate_review_data" --review-scenario "$checkmate_review_evidence" > "$checkmate_review_evidence/app.log" 2>&1 &
+# This interaction scenario asserts English fixture labels. Keep its language
+# deterministic on Chinese test hosts; Chinese narration/text has separate tests.
+CHECKMATE_AUTOMATION=1 build/CheckmateReviewAutomation.app/Contents/MacOS/CheckmateNative --automation -AppleLanguages '(en)' -AppleLocale en_US --data-dir "$checkmate_review_data" --review-scenario "$checkmate_review_evidence" > "$checkmate_review_evidence/app.log" 2>&1 &
 checkmate_review_pid=$!
 trap 'kill "$checkmate_review_pid" "$checkmate_helper_pid" 2>/dev/null || true;wait "$checkmate_review_pid" "$checkmate_helper_pid" 2>/dev/null || true;rm -rf "$checkmate_review_data"' EXIT
 for ((i=0;i<900;i++)); do

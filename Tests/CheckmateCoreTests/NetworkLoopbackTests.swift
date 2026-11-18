@@ -268,7 +268,14 @@ final class NetworkLoopbackTests:XCTestCase {
         let (runner,hostLog,configuration)=try hostGame(transport,timeControl:.fivePlusThree)
         let endpoints=endpoints(hostLog),host=runner.host
         let guest=join(transport,configuration,endpoints,.seat,name:"Ben")
-        let watchers=(0..<8).map{join(transport,configuration,endpoints,.watch,name:"Watcher \($0)")}
+        // Eight established spectators are supported, but only four TLS handshakes may be pending per listener.
+        // Admit them before adding the next: the separate pending-connection test exercises that flood limit.
+        var watchers:[Party]=[]
+        for index in 0..<8 {
+            let watcher=join(transport,configuration,endpoints,.watch,name:"Watcher \(index)")
+            eventually("watcher \(index) live"){watcher.link == .live}
+            watchers.append(watcher)
+        }
         let everyone=[guest]+watchers
         eventually("everyone live"){everyone.allSatisfy{$0.link == .live} && host.phase == .running && host.spectators.count==8}
         // Fool's mate: the guest, Black, mates on its second move.

@@ -64,6 +64,9 @@ enum LibraryListItem {
     func requestFind(){findRequests+=1}
     /// Bumped with every refilter, so the view reacts to new results without comparing thousands of rows.
     @Published private(set) var shownVersion=0
+    /// Emitted after the new lines and version have finished publishing, so an
+    /// AppKit table can apply them immediately without waiting for a display pass.
+    let linesDidChange=PassthroughSubject<Void,Never>()
     /// The lines of the list exactly as drawn: each section's header, a broken collection's error, and the games of
     /// every open section (a search opens every event). Built once per change; the table only renders it.
     private(set) var items:[LibraryListItem]=[]
@@ -84,6 +87,7 @@ enum LibraryListItem {
         // A renamed review or collection keeps its selection; its preview is read again under the new name.
         if let preview,let row=visibleRows.first(where:{$0.id==preview.id}),row.title != preview.title{self.preview=nil;updatePreview()}
         shownVersion+=1
+        linesDidChange.send()
     }
     private func updatePreview(){
         previewTask?.cancel();previewTask=nil

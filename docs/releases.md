@@ -1,9 +1,13 @@
 # Checkmate releases
 
 `Version.env` owns the native version and monotonically increasing build number.
-Version 0.10.0 is build 33 and marks the Simplified Chinese source preview.
-The GitHub prerelease currently contains source changes and the implementation plan. Mac compilation,
-XCTest, packaging, Chinese recordings and listening acceptance remain pending.
+Version 0.20.0 is build 34 and records phase-one Simplified Chinese delivery and user practical-use acceptance.
+The previous 0.10.0 (build 33) remains the source-preview baseline. See CHANGELOG.md for the current
+feature list and the exact scope of automated and human acceptance. The local universal development app
+and all 710 Chinese narration clips have been verified and installed. Narration masters and local evidence
+are excluded from Git; the source checkout provides generation, verification and import tools in
+`docs/chinese-localization.md`. A source update does not imply a Developer ID signed/notarized release.
+DeepSeek currently backs up course text translation; live DeepSeek chess guidance remains phase two.
 The application continues to target macOS 14+ with universal Apple Silicon and Intel binaries.
 Build tooling runs on the build host with Xcode 27; this is separate from the runtime target.
 Development and release builds use

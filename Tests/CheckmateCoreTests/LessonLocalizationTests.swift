@@ -10,6 +10,21 @@ import CheckmateCore
 @testable import CheckmateMacPlatform
 
 final class LessonLocalizationTests:XCTestCase {
+ func testChangedSpeechInvalidatesOnlyTheAffectedRecording() throws {
+  let library=try CourseLibrary(),directory=try scratchDirectory()
+  let source=LessonTranslation.source(library:library,index:0),store=try LessonPackStore(directory:directory)
+  try store.saveTranslation(source,source:source,locale:"fr")
+  for beat in source.beats.prefix(2) {
+   _ = try store.saveClip(pcm:plausibleLessonPCM(beat.speak),transcript:beat.speak,beatID:beat.id,source:source,locale:"fr",voice:"cedar",model:"gpt-realtime")
+  }
+  var revised=source
+  revised.beats[0].speak="Introduction. "+revised.beats[0].speak
+  try store.saveTranslation(revised,source:source,locale:"fr")
+  let pack=try XCTUnwrap(store.partialPack(source:source,locale:"fr",voice:"cedar"))
+  XCTAssertEqual(pack.translation,revised)
+  XCTAssertNil(try store.clipURL(pack:pack,beatID:source.beats[0].id))
+  XCTAssertNotNil(try store.clipURL(pack:pack,beatID:source.beats[1].id))
+ }
  func testExactIDsAndCoordinates() throws {
   let library=try CourseLibrary(), source=LessonTranslation.source(library:library,index:0)
   XCTAssertNoThrow(try source.validate(against:source))

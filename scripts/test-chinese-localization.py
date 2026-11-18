@@ -75,7 +75,38 @@ def check_course():
     return len(lessons), segments
 
 
+def check_content():
+    resources = ROOT / 'Sources/CheckmateCore/Resources'
+    overlay = read_json(resources / 'content.zh-Hans.json')
+    assert overlay['version'] == 1 and overlay['locale'] == 'zh-Hans'
+    fields = {'title', 'topic', 'level', 'summary', 'goal', 'label', 'prompt', 'context',
+              'explanation', 'hints', 'success', 'offTrack', 'mistakes', 'feedback', 'rules',
+              'choices', 'why', 'reason', 'description', 'instruction', 'question', 'text'}
+    def prose(value, active=False):
+        if isinstance(value, str):
+            return [value] if active and re.search('[A-Za-z]{3}', value) else []
+        if isinstance(value, list):
+            return [text for child in value for text in prose(child, active)]
+        if isinstance(value, dict):
+            return [text for key, child in value.items() for text in prose(child, active or key in fields)]
+        return []
+    for name in ['course.json', 'training/catalog.json', 'training/scenarios.json']:
+        assert overlay['sourceHashes'][name] == hashlib.sha256((resources / name).read_bytes()).hexdigest(), name
+    course = read_json(resources / 'course.json')
+    sources = prose([lesson['practice'] for lesson in course['lessons'] if lesson.get('practice')])
+    sources += prose(course['puzzles'])
+    sources += prose([read_json(resources / name) for name in ['training/catalog.json', 'training/scenarios.json']])
+    translations = overlay['translations']
+    for source in set(sources):
+        assert source in translations, 'Missing teaching text: ' + source
+        target = translations[source]
+        assert isinstance(target, str) and target.strip() and '\ufffd' not in target, source
+        assert sorted(NOTATION.findall(source)) == sorted(NOTATION.findall(target)), source
+    return len(set(sources))
+
+
 if __name__ == '__main__':
     entries = check_catalog()
     lessons, segments = check_course()
-    print(json.dumps({'passed': True, 'chineseCatalogEntries': entries, 'courseItems': lessons, 'courseSegments': segments}))
+    content = check_content()
+    print(json.dumps({'passed': True, 'chineseCatalogEntries': entries, 'courseItems': lessons, 'courseSegments': segments, 'teachingStrings': content}))

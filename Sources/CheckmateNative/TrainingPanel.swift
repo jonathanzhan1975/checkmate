@@ -7,8 +7,8 @@ struct TrainingPanel:View {
     var body:some View {
         if let exercise=training.exercise {
             let definition=exercise.definition,scenario=exercise.scenario
-            Text(definition.title).sectionHeading(.title2.bold())
-            Text(exercise.prompt).fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("training-prompt")
+            Text(ChineseContent.text(definition.title)).sectionHeading(.title2.bold())
+            Text(ChineseContent.text(exercise.prompt)).fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("training-prompt")
             if let fresh=TrainingRecommendation.freshnessLabel(exercise.snapshot.freshness){Text(fresh).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("training-freshness")}
             if exercise.snapshot.retry{Text("You have tried this board before, so this is practice.").font(.caption).foregroundStyle(.secondary)}
             Text(TrainingLabels.ruleMode(definition.ruleMode)).font(.caption).foregroundStyle(.secondary)
@@ -25,8 +25,8 @@ struct TrainingPanel:View {
                     Button("Cancel"){training.cancelPromotion()}.accessibilityIdentifier("training-promotion-cancel")
                 }
             }
-            if let hint=exercise.hintText{Label(hint,symbol:.hint).fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("training-hint")}
-            if !exercise.feedback.isEmpty{Text(exercise.feedback).fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("training-feedback")}
+            if let hint=exercise.hintText{Label(ChineseContent.text(hint),symbol:.hint).fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("training-hint")}
+            if !exercise.feedback.isEmpty{Text(ChineseContent.text(exercise.feedback)).fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("training-feedback")}
             if exercise.finished {result(exercise)}
             HStack {
                 if exercise.finished {
@@ -50,7 +50,7 @@ struct TrainingPanel:View {
                 Button("Clear"){training.clearSelection()}.disabled(exercise.selection.isEmpty || exercise.finished)
             }
         }
-        if exercise.task == .choose {ForEach(exercise.scenario.choices ?? [],id:\.self){choice in Button(choice){training.choose(choice)}.disabled(exercise.finished)}}
+        if exercise.task == .choose {ForEach(exercise.scenario.choices ?? [],id:\.self){choice in Button(ChineseContent.text(choice)){training.choose(choice)}.disabled(exercise.finished)}}
     }
     /// A played game: its status, the break reminder, take back and draw claims, then the moments worth another try.
     @ViewBuilder private func gameControls(_ exercise:TrainingController.Exercise)->some View {

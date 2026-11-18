@@ -19,5 +19,7 @@ enum AppSymbol:String,CaseIterable {
     func nsImage(_ description:String?=nil)->NSImage? {NSImage(systemSymbolName:rawValue,accessibilityDescription:description)}
 }
 extension Label where Title==Text,Icon==Image {
+    init(_ title:LocalizedStringKey,symbol:AppSymbol){self.init(title,systemImage:symbol.rawValue)}
+    @_disfavoredOverload
     init(_ title:String,symbol:AppSymbol){self.init(title,systemImage:symbol.rawValue)}
 }

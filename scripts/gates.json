@@ -697,7 +697,10 @@
     "Content/*",
     "scripts/test-fairness-inventory.py",
     "Tools/host-access.swift",
-    "scripts/test-chinese-localization.py"
+    "scripts/test-chinese-localization.py",
+    "Tools/ChineseNarration/*",
+    "Tools/translate-chinese-content.py",
+    "Tools/install-chinese-lessons.py"
    ]
   },
   {

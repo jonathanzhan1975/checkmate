@@ -6,9 +6,15 @@
 // 3. after normal termination, reads back the persisted review cursor and ideas.
 import AppKit
 import ApplicationServices
+import Darwin
+/// A failed acceptance assertion is a test failure, not a process crash.
+func failScenario(_ message:String)->Never {
+    FileHandle.standardError.write(Data(("Review scenario failed: "+message+"\n").utf8))
+    exit(1)
+}
 // The test host carries ~/.config/checkmate/host-role naming "test" (alone or with "build"), the marker scripts/test_host.py reads.
 let hostRoles=Set(((try? String(contentsOf:FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/checkmate/host-role"),encoding:.utf8)) ?? "").split(whereSeparator:\.isWhitespace).map(String.init))
-guard hostRoles.contains("test") else{fatalError("Run native UI helpers on the test host only.")}
+guard hostRoles.contains("test") else{failScenario("Run native UI helpers on the test host only.")}
 let directory=URL(fileURLWithPath:CommandLine.arguments[1]),marker=directory.appendingPathComponent("open-panel-ready.json"),resultURL=directory.appendingPathComponent("review-ui-results.json")
 let isolatedBundle="ai.xiaolai.checkmate.native-review-automation"
 func value(_ element:AXUIElement,_ attribute:String)->CFTypeRef?{var value:CFTypeRef?;AXUIElementCopyAttributeValue(element,attribute as CFString,&value);return value}
@@ -100,7 +106,7 @@ func click(_ element:AXUIElement,pid:Int)->Bool {
     return true
 }
 func isolatedApp(_ pid:Int)->AXUIElement {
-    guard let app=NSRunningApplication(processIdentifier:pid_t(pid)),app.bundleIdentifier==isolatedBundle else{fatalError("Request is not from the isolated review automation app")}
+    guard let app=NSRunningApplication(processIdentifier:pid_t(pid)),app.bundleIdentifier==isolatedBundle else{failScenario("Request is not from the isolated review automation app")}
     let element=AXUIElementCreateApplication(pid_t(pid));AXUIElementSetMessagingTimeout(element,3);return element
 }
 /// One check; "passed" is decided here so the app cannot certify its own rendering.
@@ -163,23 +169,23 @@ func run(_ check:[String:Any],in app:AXUIElement,pid:Int)->[String:Any] {
     return result
 }
 func openPanelPhase(){
-    guard let data=try? Data(contentsOf:marker),let payload=try? JSONSerialization.jsonObject(with:data) as? [String:Any],let pid=payload["pid"] as? Int,let path=payload["path"] as? String,let app=NSRunningApplication(processIdentifier:pid_t(pid)),app.bundleIdentifier==isolatedBundle else{fatalError("Missing isolated panel marker")}
+    guard let data=try? Data(contentsOf:marker),let payload=try? JSONSerialization.jsonObject(with:data) as? [String:Any],let pid=payload["pid"] as? Int,let path=payload["path"] as? String,let app=NSRunningApplication(processIdentifier:pid_t(pid)),app.bundleIdentifier==isolatedBundle else{failScenario("Missing isolated panel marker")}
     app.activate(options:[.activateAllWindows]);Thread.sleep(forTimeInterval:0.4)
-    guard NSWorkspace.shared.frontmostApplication?.processIdentifier==pid_t(pid) else{fatalError("Isolated app is not foreground")}
+    guard NSWorkspace.shared.frontmostApplication?.processIdentifier==pid_t(pid) else{failScenario("Isolated app is not foreground")}
     // The panel may open in a remembered folder and view on a given machine, so choose the fixture as a person would:
     // Go to Folder with its path selects it in any view. A visible entry is clicked too, when the view shows one.
     let ax=isolatedApp(pid),name=URL(fileURLWithPath:path).lastPathComponent
-    guard find(ax,"Open",button:true) != nil else{fatalError("Open panel absent")}
+    guard find(ax,"Open",button:true) != nil else{failScenario("Open panel absent")}
     key(5,flags:[.maskCommand,.maskShift]);usleep(300_000);type(path);key(36);usleep(400_000)
     let deadline=Date().addingTimeInterval(3)
     var found=find(ax,name,roles:fileEntryRoles);while found==nil,Date()<deadline{Thread.sleep(forTimeInterval:0.1);found=find(ax,name,roles:fileEntryRoles)}
     if found==nil{let shot=Process();shot.executableURL=URL(fileURLWithPath:"/usr/sbin/screencapture");shot.arguments=["-x",directory.appendingPathComponent("open-panel-missing-row.png").path];try? shot.run();shot.waitUntilExit()}
-    guard let entry=found else{fatalError("Known fixture row absent from actual panel")}
+    guard let entry=found else{failScenario("Known fixture row absent from actual panel")}
     // List view wraps an entry in a row; column view does not. Click the row when there is one, otherwise the entry.
     var row=entry,ancestor:AXUIElement?=entry
     for _ in 0..<8 {guard let current=ancestor else{break};if value(current,kAXRoleAttribute) as? String==kAXRowRole{row=current;break};ancestor=value(current,kAXParentAttribute).map{$0 as! AXUIElement}}
     FileHandle.standardError.write(Data("Fixture entry role \(value(row,kAXRoleAttribute) ?? "" as CFString)\n".utf8))
-    guard let open=find(ax,"Open",button:true) else{fatalError("Open control absent")}
+    guard let open=find(ax,"Open",button:true) else{failScenario("Open control absent")}
     // The Open panel is system UI, not the app under test: click it like a person when it reports frames, otherwise
     // select through accessibility, and say which path ran.
     let selectedByPath=value(open,kAXEnabledAttribute) as? Bool==true
@@ -189,7 +195,7 @@ func openPanelPhase(){
     let chosen=Date().addingTimeInterval(2);while value(open,kAXEnabledAttribute) as? Bool != true,Date()<chosen{Thread.sleep(forTimeInterval:0.1)}
     guard value(open,kAXEnabledAttribute) as? Bool==true else{
         let shot=Process();shot.executableURL=URL(fileURLWithPath:"/usr/sbin/screencapture");shot.arguments=["-x",directory.appendingPathComponent("open-panel-unselected.png").path];try? shot.run();shot.waitUntilExit()
-        fatalError("The fixture file is not chosen: Open stays disabled (clicked \(value(row,kAXRoleAttribute) ?? "none" as CFString) at \(rect(row).map{"\($0)"} ?? "no frame"))")}
+        failScenario("The fixture file is not chosen: Open stays disabled (clicked \(value(row,kAXRoleAttribute) ?? "none" as CFString) at \(rect(row).map{"\($0)"} ?? "no frame"))")}
     if click(open,pid:pid){print("Clicked Open with the pointer")}else{print("Open via accessibility",AXUIElementPerformAction(open,kAXPressAction as CFString).rawValue)}
 }
 
@@ -208,17 +214,17 @@ while Date()<deadline {
     }
     Thread.sleep(forTimeInterval:0.1)
 }
-guard panelDone else{fatalError("Open panel phase never ran")}
+guard panelDone else{failScenario("Open panel phase never ran")}
 
 var result:[String:Any]?
 for _ in 0..<900{if let data=try? Data(contentsOf:resultURL),let object=try? JSONSerialization.jsonObject(with:data) as? [String:Any]{result=object;break};Thread.sleep(forTimeInterval:0.1)}
 let appPID=(try? JSONSerialization.jsonObject(with:Data(contentsOf:marker)) as? [String:Any])?["pid"] as? Int ?? pid ?? 0
 for _ in 0..<100{if NSRunningApplication(processIdentifier:pid_t(appPID))==nil{break};Thread.sleep(forTimeInterval:0.1)}
-guard NSRunningApplication(processIdentifier:pid_t(appPID))==nil,let result=result,let documentPath=result["reviewDocumentFile"] as? String,let expected=result["expectedPersistedCursor"] as? Int else{fatalError("No terminated scenario persistence result")}
+guard NSRunningApplication(processIdentifier:pid_t(appPID))==nil,let result=result,let documentPath=result["reviewDocumentFile"] as? String,let expected=result["expectedPersistedCursor"] as? Int else{failScenario("No terminated scenario persistence result")}
 let documentURL=URL(fileURLWithPath:documentPath),record=try JSONSerialization.jsonObject(with:Data(contentsOf:documentURL)) as! [String:Any]
 var cursor=record["cursor"] as! Int
 let sidecar=documentURL.deletingPathExtension().appendingPathExtension("cursor.json")
 if let data=try? Data(contentsOf:sidecar),let metadata=try? JSONSerialization.jsonObject(with:data) as? [String:Any],let date=metadata["updatedAt"] as? Double, date >= (record["updatedAt"] as? Double ?? 0){cursor=metadata["cursor"] as! Int}
-guard cursor==expected,(record["branches"] as? [Any])?.count==result["expectedSavedIdeas"] as? Int else{fatalError("Normal termination lost latest cursor or ideas")}
+guard cursor==expected,(record["branches"] as? [Any])?.count==result["expectedSavedIdeas"] as? Int else{failScenario("Normal termination lost latest cursor or ideas")}
 try JSONSerialization.data(withJSONObject:["passed":true,"cursor":cursor,"normalTermination":true,"accessibilityRequestsAnswered":nextRequest-1]).write(to:directory.appendingPathComponent("shutdown-persistence-result.json"))
 print("Normal termination preserves latest review cursor and ideas; answered \(nextRequest-1) accessibility requests")

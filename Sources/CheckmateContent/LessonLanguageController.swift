@@ -8,11 +8,13 @@ import Combine
 /// lessons a recording job skips because they have no translated text.
 public struct LessonJobPlan:Equatable,Sendable {
  public let mode:String,language:String,voice:String,lessons:Int,clips:Int,untranslated:Int,seconds:Double?
+ public var provider="codex"
  private static func lessonCount(_ n:Int)->String {String(localized:"\(n) lessons",bundle:.checkmate)}
  public var title:String {mode=="translate" ? String(localized:"Translate \(lessons) lessons into \(language)?",bundle:.checkmate,comment:"The second value is a language name"):String(localized:"Record \(clips) clips for \(Self.lessonCount(lessons))?",bundle:.checkmate,comment:"The second value is a number of lessons, such as “3 lessons”")}
  public var action:String {mode=="translate" ? String(localized:"Translate",bundle:.checkmate):String(localized:"Record",bundle:.checkmate,comment:"Verb: record the narration audio")}
  public var message:String {
   var parts=[mode=="translate" ? String(localized:"Each lesson is one translation request on your signed-in account.",bundle:.checkmate):String(localized:"Each clip is one recording request on your signed-in account, in the \(voice.capitalized) voice.",bundle:.checkmate)]
+  if mode=="translate",provider=="deepseek"{parts[0]=String(localized:"Each lesson is a DeepSeek API translation request. Separate API charges apply; completed translations are reused.",bundle:.checkmate)}
   if mode != "translate",untranslated>0{parts.append(String(localized:"\(untranslated) lessons have no translated text yet and are skipped; translate them first.",bundle:.checkmate))}
   if let seconds{let minutes=Int((seconds/60).rounded(.up));parts.append(seconds<60 ? String(localized:"Estimated time: less than a minute, judged from earlier runs on this Mac.",bundle:.checkmate):String(localized:"Estimated time: about \(minutes) minutes, judged from earlier runs on this Mac.",bundle:.checkmate))}
   else{parts.append(mode=="translate" ? String(localized:"No time estimate yet: there are no earlier translations on this Mac to judge from.",bundle:.checkmate):String(localized:"No time estimate yet: there are no earlier recordings on this Mac to judge from.",bundle:.checkmate))}
@@ -51,7 +53,17 @@ public struct LessonGroup:Equatable,Sendable {public let title:String,lessons:[I
  @Published public private(set) var accountStatus=String(localized:"Account status has not been refreshed. Voice subscription attribution is unknown.",bundle:.checkmate)
  public var voiceConflict:()->Bool={false},beforeRemove:()->Void={},playPreview:((URL)->Void)?,onPacksChanged:()->Void={},onSelectionChange:()->Void={}
  public private(set) var recording=false
- private let translator:any LessonTranslationProvider,recorder:any LessonRecordingProvider
+ private let primaryTranslator:any LessonTranslationProvider,recorder:any LessonRecordingProvider
+ private let backupTranslator:any LessonTranslationProvider = DeepSeekLessonTranslator()
+ @Published public private(set) var useDeepSeekBackup=false
+ private var translator:any LessonTranslationProvider {useDeepSeekBackup ? backupTranslator:primaryTranslator}
+ public func selectDeepSeekBackup(_ enabled:Bool) {
+  guard !busy,!planning else{return}
+  accountTask?.cancel();accountTask=nil;accountSnapshotGeneration=UUID()
+  useDeepSeekBackup=enabled
+  status=enabled ? String(localized:"DeepSeek text translation selected. Separate API charges apply; recordings still use the voice service.",bundle:.checkmate):String(localized:"Codex text translation selected.",bundle:.checkmate)
+  accountStatus=String(localized:"The translation service changed. Refresh account status.",bundle:.checkmate)
+ }
  private var task:Task<Void,Never>?,generation=UUID(),accountTask:Task<Void,Never>?
  /// The lessons and clips that failed in the last job, named for the learner, and their keys so a Resume tries them last.
  @Published public private(set) var problems:[String]=[]
@@ -68,7 +80,7 @@ public struct LessonGroup:Equatable,Sendable {public let title:String,lessons:[I
   return "\(modified)|\(size)|\(inode)"
  }
  private var selectionTask:Task<Void,Never>?,selectionGeneration=UUID()
- public init(library:CourseLibrary,directory:URL,usage:UsageLedger,translator:any LessonTranslationProvider=CodexSubscriptionClient(),recorder:any LessonRecordingProvider=RealtimeLessonRecorder(),accountAuthMetadata:(@Sendable ()->String)?=nil)throws {self.library=library;do{store=try LessonPackStore(directory:directory)}catch{store=LessonPackStore.unavailable(directory:directory,reason:String(localized:"Offline lesson storage is unavailable. English lessons remain available.",bundle:.checkmate))};self.usage=usage;self.translator=translator;self.recorder=recorder
+ public init(library:CourseLibrary,directory:URL,usage:UsageLedger,translator:any LessonTranslationProvider=CodexSubscriptionClient(),recorder:any LessonRecordingProvider=RealtimeLessonRecorder(),accountAuthMetadata:(@Sendable ()->String)?=nil)throws {self.library=library;do{store=try LessonPackStore(directory:directory)}catch{store=LessonPackStore.unavailable(directory:directory,reason:String(localized:"Offline lesson storage is unavailable. English lessons remain available.",bundle:.checkmate))};self.usage=usage;self.primaryTranslator=translator;self.recorder=recorder
   if let accountAuthMetadata{self.accountAuthMetadata=accountAuthMetadata}else if !NativePolicy.silent,translator is CodexSubscriptionClient{self.accountAuthMetadata={Self.liveAuthMetadata()}}else{self.accountAuthMetadata=nil}
   if !NativePolicy.silent,self.accountAuthMetadata != nil {
    accountMonitor=Timer.scheduledTimer(withTimeInterval:3,repeats:true){[weak self] _ in Task{@MainActor in await self?.checkAccountAuthenticationMetadata()}}
@@ -137,7 +149,7 @@ public struct LessonGroup:Equatable,Sendable {public let title:String,lessons:[I
   guard mode=="translate" || mode=="record" else{return nil}
   if let problem=startProblem(mode:mode){status=problem;return nil}
   let locale=language,chosenVoice=voice,store=store,library=library;planning=true;defer{planning=false};status=String(localized:"Checking your sign-in…",bundle:.checkmate)
-  do{_=try await translator.accountStatus()}catch{status=Sentences.join(String(localized:"Nothing was started: your sign-in could not be confirmed.",bundle:.checkmate),userFacingMessage(error,fallback:String(localized:"Sign in, then try again.",bundle:.checkmate)));return nil}
+  do{if mode=="translate"{_=try await translator.accountStatus()}else{try await recorder.preflight()}}catch{status=Sentences.join(String(localized:"Nothing was started: your sign-in could not be confirmed.",bundle:.checkmate),userFacingMessage(error,fallback:String(localized:"Sign in, then try again.",bundle:.checkmate)));return nil}
   let counts=await Task.detached{()->(lessons:Int,clips:Int,untranslated:Int) in var lessons=0,clips=0,untranslated=0
    for index in only.map({[$0]}) ?? Array(library.lessons.indices) {let source=LessonTranslation.source(library:library,index:index)
     // Damaged text or recordings count as missing: this is a count for the confirmation, and the job itself replaces
@@ -155,7 +167,7 @@ public struct LessonGroup:Equatable,Sendable {public let title:String,lessons:[I
   let activity:UsageActivity=mode=="translate" ? .translation:.lessonRecording,each=usage.records.filter{$0.activity==activity && $0.status == .completed}.map{$0.updatedAt.timeIntervalSince($0.startedAt)}.sorted()
   let typical=each.isEmpty ? nil:each[each.count/2]
   status=String(localized:"Waiting for you to confirm.",bundle:.checkmate)
-  return LessonJobPlan(mode:mode,language:name,voice:chosenVoice,lessons:counts.lessons,clips:counts.clips,untranslated:counts.untranslated,seconds:typical.map{$0*Double(mode=="translate" ? counts.lessons:counts.clips)})
+  return LessonJobPlan(mode:mode,language:name,voice:chosenVoice,lessons:counts.lessons,clips:counts.clips,untranslated:counts.untranslated,seconds:typical.map{$0*Double(mode=="translate" ? counts.lessons:counts.clips)},provider:translator.providerID)
  }
  /// The learner said no to a planned job: nothing was requested.
  public func declinePlan(){guard !busy else{return};status=String(localized:"Nothing was started.",bundle:.checkmate)}
@@ -188,7 +200,7 @@ public struct LessonGroup:Equatable,Sendable {public let title:String,lessons:[I
     do {
      var text=try await Task.detached{try self.store.translation(source:source,locale:locale)}.value
      if mode=="translate",text==nil {
-      let operation=self.usage.begin(activity:.translation,provider:"codex",sessionID:UUID().uuidString,locale:locale,lessonID:source.lessonID)
+      let operation=self.usage.begin(activity:.translation,provider:self.translator.providerID,sessionID:UUID().uuidString,locale:locale,lessonID:source.lessonID)
       do {
        let result=try await self.translator.translate(source:source,locale:locale,onUsage:{[weak self] turn,model,tokens in Task{@MainActor in self?.usage.record(operationID:operation,providerID:turn,tokens:tokens,status:.running,cumulative:true,model:model)}})
        self.usage.record(operationID:operation,providerID:result.turnID,tokens:result.tokens,status:.running,cumulative:true,estimatedCredits:result.estimatedCredits,estimatedUSD:result.estimatedUSD,model:result.model)
@@ -256,6 +268,7 @@ public struct LessonGroup:Equatable,Sendable {public let title:String,lessons:[I
  private func appendStaleAccountSnapshot(){if let previous=lastAccountStatus,let date=lastAccountRefresh{accountStatus += "\n"+String(localized:"Stale account snapshot from \(date.formatted()):",bundle:.checkmate,comment:"Introduces the last account status read, kept after a failed refresh")+"\n"+previous}}
  /// Read-only metadata check: never reads credentials and never contacts the provider.
  public func checkAccountAuthenticationMetadata()async {
+  guard !useDeepSeekBackup else{return}
   guard let metadata=accountAuthMetadata,let previous=accountAuthStamp,lastAccountRefresh != nil,!accountSnapshotStale else{return}
   let generation=accountSnapshotGeneration,current=await Task.detached{metadata()}.value
   guard generation==accountSnapshotGeneration,!accountSnapshotStale,current != previous else{return}

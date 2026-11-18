@@ -32,8 +32,14 @@ def check_unit(evidence: pathlib.Path) -> dict:
     log = (evidence / 'swift-tests.log').read_text()
     assert "Test Suite 'All tests' passed" in log, 'swift test did not pass'
     summaries = re.findall(r"Test Suite '([^']+\.xctest)' passed[^\n]*\n\s*Executed (\d+) tests, with (?:(\d+) tests skipped and )?0 failures", log)
-    assert {name for name, _, _ in summaries} == {'CheckmateCoreTests.xctest', 'CheckmateMCPTests.xctest', 'CheckmateNativeTests.xctest', 'CheckmateDomainTests.xctest'}, 'Missing XCTest bundle result'
-    assert len(summaries) == 4, 'Duplicate XCTest bundle result'
+    expected = {'CheckmateCoreTests', 'CheckmateMCPTests', 'CheckmateNativeTests', 'CheckmateDomainTests'}
+    if {name for name, _, _ in summaries} == {'CheckmatePackageTests.xctest'}:
+        assert len(summaries) == 1, 'Duplicate XCTest bundle result'
+        modules = set(re.findall(r"Test Case '-\[([^.]+)\.", log))
+        assert modules == expected, 'Missing XCTest module result'
+    else:
+        assert {name for name, _, _ in summaries} == {name + '.xctest' for name in expected}, 'Missing XCTest bundle result'
+        assert len(summaries) == 4, 'Duplicate XCTest bundle result'
     count = sum(int(total) for _, total, _ in summaries)
     skipped = sum(int(skips or 0) for _, _, skips in summaries)
     skipped_names = re.findall(r"Test Case '-\[CheckmateCoreTests\.(.*?)\]' skipped", log)

@@ -2,7 +2,7 @@ import CheckmateAssets
 import Foundation
 public struct AppSettings:Codable,Equatable {
     public var coachReasoningEffort="minimal"
-    public var coachVoice="cedar",voiceLanguage="en",voiceAutoConnect=false,voiceMicrophone=true,voiceInputDevice="",voiceAssistMoves=false,voiceVolume=1.0
+    public var coachVoice="cedar",voiceLanguage=(Bundle.checkmate.preferredLocalizations.first?.hasPrefix("zh")==true ? "zh":"en"),voiceAutoConnect=false,voiceMicrophone=true,voiceInputDevice="",voiceAssistMoves=false,voiceVolume=1.0
     /// The learner agreed, once, to what the voice coach sends to OpenAI. Nothing connects voice before it, on launch
     /// or otherwise. A new install starts without it. Settings saved before this key existed take it from
     /// `voiceAutoConnect`: connecting at launch was on by default then, so most of those installs never chose it, but
@@ -18,7 +18,7 @@ public struct AppSettings:Codable,Equatable {
     public var reviewBestMoveArrow=false
     /// Check for Updates at launch (V-19): off until the learner turns it on; Check for Updates… works either way.
     public var checkForUpdates=false
-    public var lessonLanguage="en",lessonVoice="cedar"
+    public var lessonLanguage=(Bundle.checkmate.preferredLocalizations.first?.hasPrefix("zh")==true ? "zh-Hans":"en"),lessonVoice="cedar"
     public var companionAutoStart=true
     public var opponentMode="skill",opponentElo=1320,miniOpponentProfile="standard",practiceSide="w"
     public var opponentPreset="custom",opponentRandomSeed=""

@@ -29,6 +29,13 @@ struct LessonSettingsPane:View {
     // lesson picker and list follow the course's sections.
     var body:some View {
         Section("Lesson language") {
+            Toggle("Use DeepSeek backup text translation",isOn:Binding(get:{controller.useDeepSeekBackup},set:{controller.selectDeepSeekBackup($0)}))
+                .disabled(controller.busy || controller.planning)
+                .accessibilityIdentifier("lesson-deepseek-backup")
+            if controller.useDeepSeekBackup {
+                Text("DeepSeek has separate API charges. Configure DEEPSEEK_API_KEY on this Mac. Selecting it does not start translation.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Button("Use Simplified Chinese Courses") { select(language: "zh-Hans") }
                 .disabled(controller.busy)
                 .accessibilityIdentifier("use-chinese-courses")

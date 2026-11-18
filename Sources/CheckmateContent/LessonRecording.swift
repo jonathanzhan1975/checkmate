@@ -6,7 +6,11 @@ import PCM16
 import RealtimeConnection
 import SaidGuard
 public struct LessonRecordingResult:Sendable {public var pcm:Data,transcript:String,responseID:String,tokens:UsageTokens?,model:String;public init(pcm:Data,transcript:String,responseID:String,tokens:UsageTokens?,model:String){self.pcm=pcm;self.transcript=transcript;self.responseID=responseID;self.tokens=tokens;self.model=model}}
-public protocol LessonRecordingProvider:Sendable {func record(script:String,locale:String,voice:String,onUsage:@escaping @Sendable(String,UsageTokens?)->Void)async throws->LessonRecordingResult}
+public protocol LessonRecordingProvider:Sendable {
+ func preflight() async throws
+ func record(script:String,locale:String,voice:String,onUsage:@escaping @Sendable(String,UsageTokens?)->Void)async throws->LessonRecordingResult
+}
+public extension LessonRecordingProvider {func preflight() async throws {}}
 public enum LessonRecording {
  public static let maximumPCMBytes=28_800_000
  public static let maximumMessageBytes=2_000_000,maximumTranscriptBytes=64000
@@ -38,12 +42,18 @@ private final class RecordingTimeoutFlag:@unchecked Sendable {
  var timedOut:Bool {lock.lock();defer{lock.unlock()};return expired}
 }
 public final class RealtimeLessonRecorder:LessonRecordingProvider,@unchecked Sendable {
+ private let rejectedRecording:@Sendable(Data,String,String)->Void
  private let secretProvider:@Sendable()async throws->ClientSecret
  private let socketFactory:@Sendable(ClientSecret)async throws->any LessonRecordingSocket
  private let timeout:TimeInterval,fixture:Bool
- public init(){secretProvider={try await VoiceGateway().authorize()};socketFactory={try await LiveLessonRecordingSocket.open(secret:$0)};timeout=180;fixture=false}
+ public convenience init(){self.init(rejectedRecording:{_,_,_ in})}
+ public init(rejectedRecording:@escaping @Sendable(Data,String,String)->Void){self.rejectedRecording=rejectedRecording;secretProvider={try await VoiceGateway().authorize()};socketFactory={try await LiveLessonRecordingSocket.open(secret:$0)};timeout=180;fixture=false}
+ public func preflight() async throws {
+  guard fixture == NativePolicy.silent else{throw CheckmateError.unavailable(String(localized:"Live recording is disabled during automation.",bundle:.checkmate))}
+  _ = try await secretProvider()
+ }
  // Internal injection is restricted to silent fixture execution and cannot access live credentials.
- init(timeout:TimeInterval=180,secretProvider:@escaping @Sendable()async throws->ClientSecret,socketFactory:@escaping @Sendable(ClientSecret)async throws->any LessonRecordingSocket){self.timeout=max(0.01,min(timeout,180));self.secretProvider=secretProvider;self.socketFactory=socketFactory;fixture=true}
+ init(timeout:TimeInterval=180,secretProvider:@escaping @Sendable()async throws->ClientSecret,socketFactory:@escaping @Sendable(ClientSecret)async throws->any LessonRecordingSocket){self.rejectedRecording={_,_,_ in};self.timeout=max(0.01,min(timeout,180));self.secretProvider=secretProvider;self.socketFactory=socketFactory;fixture=true}
  public func record(script:String,locale:String,voice:String,onUsage:@escaping @Sendable(String,UsageTokens?)->Void)async throws->LessonRecordingResult {
   guard fixture == NativePolicy.silent else{throw CheckmateError.unavailable(String(localized:"Live recording is disabled during automation.",bundle:.checkmate))}
   guard LessonLanguages.normalizedSelection(locale)==locale,["cedar","marin"].contains(voice),!script.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,script.utf8.count<=32000 else{throw CheckmateError.invalid(String(localized:"Invalid recording language or voice.",bundle:.checkmate))}
@@ -63,7 +73,8 @@ public final class RealtimeLessonRecorder:LessonRecordingProvider,@unchecked Sen
       let id=response["id"] as? String ?? responseID,tokens=UsageTokens.parseRealtime(response["usage"] as? [String:Any]);onUsage(id,tokens)
       guard started,!id.isEmpty,responseID==id,response["status"] as? String=="completed" else{throw CheckmateError.unavailable(String(localized:"Recording did not finish. Completed clips are preserved.",bundle:.checkmate))}
       guard LessonRecording.acceptedModel(resolvedModel) else{throw CheckmateError.unavailable(String(localized:"The provider selected an unsupported recording model. No clip was saved.",bundle:.checkmate))}
-      _=try LessonRecording.validate(pcm:pcm,transcript:transcript,script:script,language:locale)
+      do{_=try LessonRecording.validate(pcm:pcm,transcript:transcript,script:script,language:locale)}
+      catch{self.rejectedRecording(pcm,transcript,script);throw error}
       return LessonRecordingResult(pcm:pcm,transcript:transcript,responseID:id,tokens:tokens,model:resolvedModel)
      }
      if type.hasPrefix("response.output_audio") {

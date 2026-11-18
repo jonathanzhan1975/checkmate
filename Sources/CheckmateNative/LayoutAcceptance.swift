@@ -6,7 +6,12 @@ extension AppDelegate {
             try? await Task.sleep(nanoseconds:500_000_000)
             var samples:[[String:Any]]=[],failures:[String]=[]
             @MainActor func sample(_ phase:String){window.contentView?.layoutSubtreeIfNeeded();game.titleView.layoutSubtreeIfNeeded();game.titleView.syncCenter();let core=game.main.view.convert(game.main.view.bounds,to:nil),board=game.board.boardRect,title=game.titleView.convert(game.titleView.label.frame,to:nil);let panes=[game.navigation!,game.inspector!].map{$0.view.convert($0.view.bounds,to:nil)}
-                samples.append(["phase":phase,"window":[window.frame.minX,window.frame.minY,window.frame.width,window.frame.height],"main":[core.minX,core.minY,core.width,core.height],"boardSide":board.width,"titleCenter":title.midX,"boardCenter":core.midX,"leftCollapsed":game.sidebarItem.isCollapsed,"rightCollapsed":game.inspectorItem.isCollapsed,"paneHeights":panes.map(\.height)])
+                // macOS 26 sidebars float inside a full-height split pane. Measure
+                // the allocated pane separately from its inset SwiftUI content.
+                // https://developer.apple.com/videos/play/wwdc2025/310/
+                let allocated=[0,2].map{index in let view=game.split.splitView.arrangedSubviews[index];return view.convert(view.bounds,to:nil)}
+                func coordinates(_ rect:NSRect)->[CGFloat]{[rect.minX,rect.minY,rect.width,rect.height]}
+                samples.append(["paneAllocatedFrames":allocated.map(coordinates),"paneContentFrames":panes.map(coordinates),"phase":phase,"window":[window.frame.minX,window.frame.minY,window.frame.width,window.frame.height],"main":[core.minX,core.minY,core.width,core.height],"boardSide":board.width,"titleCenter":title.midX,"boardCenter":core.midX,"leftCollapsed":game.sidebarItem.isCollapsed,"rightCollapsed":game.inspectorItem.isCollapsed,"paneHeights":panes.map(\.height)])
             }
             @MainActor func toggle(_ phase:String,left:Bool) async {left ? game.toggleLeft():game.toggleRight();for i in 0..<24{try? await Task.sleep(nanoseconds:33_000_000);sample(phase+"-"+String(i))}}
             let screen=window.screen!.visibleFrame,initial=window.frame

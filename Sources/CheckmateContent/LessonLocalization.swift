@@ -79,7 +79,12 @@ public final class LessonPackStore:@unchecked Sendable {
  /// name. Any other manifest (newer, or not written here) is uninspected, so no audio counts as orphaned while it exists.
  private func recognised(_ pack:LessonPack,at file:URL)->Bool {pack.version==1 && LessonLanguages.valid(pack.locale) && ["cedar","marin"].contains(pack.voice) && file.lastPathComponent==url("pack|\(pack.sourceFingerprint)|\(pack.locale)|\(pack.voice)|1").lastPathComponent}
  public func partialPack(source:LessonTranslation,locale:String,voice:String)throws->LessonPack? {
-  lock.lock();defer{lock.unlock()};let file=manifestURL(source:source,locale:locale,voice:voice);guard FileManager.default.fileExists(atPath:file.path) else{return nil};let pack=try JSONDecoder().decode(LessonPack.self,from:safeRead(file,limit:2_000_000));guard pack.version==1,pack.sourceFingerprint==source.fingerprint,pack.locale==locale,pack.voice==voice,["cedar","marin"].contains(voice) else{throw CheckmateError.invalid(String(localized:"The stored lesson pack is outdated.",bundle:.checkmate))};try pack.translation.validate(against:source);guard pack.clips.allSatisfy({source.beats.map(\.id).contains($0.beatID)}),Set(pack.clips.map(\.beatID)).count==pack.clips.count else{throw CheckmateError.invalid(String(localized:"Duplicate stored recordings.",bundle:.checkmate))};return pack
+  lock.lock();defer{lock.unlock()};let file=manifestURL(source:source,locale:locale,voice:voice);guard FileManager.default.fileExists(atPath:file.path) else{return nil};var pack=try JSONDecoder().decode(LessonPack.self,from:safeRead(file,limit:2_000_000));guard pack.version==1,pack.sourceFingerprint==source.fingerprint,pack.locale==locale,pack.voice==voice,["cedar","marin"].contains(voice) else{throw CheckmateError.invalid(String(localized:"The stored lesson pack is outdated.",bundle:.checkmate))};try pack.translation.validate(against:source);guard pack.clips.allSatisfy({source.beats.map(\.id).contains($0.beatID)}),Set(pack.clips.map(\.beatID)).count==pack.clips.count else{throw CheckmateError.invalid(String(localized:"Duplicate stored recordings.",bundle:.checkmate))}
+  if let current=try translation(source:source,locale:locale),current != pack.translation {
+   pack.translation=current
+   pack.clips.removeAll {clip in !current.beats.contains{$0.id==clip.beatID && reviewHash(Data($0.speak.utf8))==clip.scriptHash}}
+  }
+  return pack
  }
  public func clipURL(pack:LessonPack,beatID:String)throws->URL? {
   guard let clip=pack.clips.first(where:{$0.beatID==beatID}),let beat=pack.translation.beats.first(where:{$0.id==beatID}),clip.generation==1,LessonRecording.acceptedModel(clip.model),clip.voice==pack.voice,clip.scriptHash==reviewHash(Data(beat.speak.utf8)),clip.seconds.isFinite,clip.seconds>0,clip.seconds<=600 else{return nil}
@@ -111,6 +116,8 @@ public final class LessonPackStore:@unchecked Sendable {
  public func saveClip(pcm:Data,transcript:String,beatID:String,source:LessonTranslation,locale:String,voice:String,model:String)throws->LessonPack {
   lock.lock();defer{lock.unlock()};guard LessonRecording.acceptedModel(model),["cedar","marin"].contains(voice) else{throw CheckmateError.invalid(String(localized:"The recording model or voice is not supported by this generation profile.",bundle:.checkmate))};guard let translation=try translation(source:source,locale:locale),let beat=translation.beats.first(where:{$0.id==beatID}) else{throw CheckmateError.invalid(String(localized:"Translate the lesson before recording.",bundle:.checkmate))};let seconds=try LessonRecording.validate(pcm:pcm,transcript:transcript,script:beat.speak,language:locale),wav=try LessonRecording.wav(pcm)
   var pack=try partialPack(source:source,locale:locale,voice:voice) ?? LessonPack(sourceFingerprint:source.fingerprint,locale:locale,voice:voice,translation:translation,clips:[])
+  pack.translation=translation
+  pack.clips.removeAll {clip in !translation.beats.contains{$0.id==clip.beatID && reviewHash(Data($0.speak.utf8))==clip.scriptHash}}
   try write(wav,to:url("audio|\(source.fingerprint)|\(locale)|\(voice)|\(beatID)|1"));pack.clips.removeAll{$0.beatID==beatID};pack.clips.append(LessonClip(beatID:beatID,scriptHash:reviewHash(Data(beat.speak.utf8)),audioHash:reviewHash(wav),seconds:seconds,model:model,voice:voice,generation:1));try write(JSONEncoder().encode(pack),to:manifestURL(source:source,locale:locale,voice:voice));return pack
  }
  /// Removes translated text, manifests and recordings made for earlier versions of the lessons (their source

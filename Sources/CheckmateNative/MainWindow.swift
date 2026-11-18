@@ -67,8 +67,27 @@ final class BoardTitleView:NSView {
     private(set) var reviewWorkspaceView:NSHostingView<ReviewWorkspaceContent>!
     private var workspaceAboveControls:NSLayoutConstraint!,workspaceFill:NSLayoutConstraint!
     private(set) var trainingLibraryView:NSHostingView<TrainingLibraryHost>!
-    var leftExtent:CGFloat {Metrics.left+split.splitView.dividerThickness}
-    var rightExtent:CGFloat {Metrics.right+split.splitView.dividerThickness}
+    private var measuredLeftExtent:CGFloat?,measuredRightExtent:CGFloat?
+    var leftExtent:CGFloat {drawerExtent(sidebar:true)}
+    var rightExtent:CGFloat {drawerExtent(sidebar:false)}
+    /// AppKit may wrap a sidebar in inset glass after a fullscreen transition.
+    /// Its occupied width then differs from content width + dividerThickness.
+    /// Measure a fully open pane and retain that extent while it is collapsed;
+    /// using the old sum makes Auto Layout and squareAfterResize resize each
+    /// other's window indefinitely (1318 ↔ 1324 points on macOS 26).
+    private func drawerExtent(sidebar:Bool)->CGFloat {
+        let nominal=sidebar ? Metrics.left:Metrics.right
+        let item=sidebar ? sidebarItem:inspectorItem
+        if let item,!item.isCollapsed,!animating,!fullscreenTransition {
+            let area=main.view.convert(main.view.bounds,to:split.splitView)
+            let atLeading=sidebar != (split.splitView.userInterfaceLayoutDirection == .rightToLeft)
+            let extent=atLeading ? area.minX-split.splitView.bounds.minX:split.splitView.bounds.maxX-area.maxX
+            if area.width>0,extent>=nominal {
+                if sidebar{measuredLeftExtent=extent}else{measuredRightExtent=extent}
+            }
+        }
+        return (sidebar ? measuredLeftExtent:measuredRightExtent) ?? (nominal+split.splitView.dividerThickness)
+    }
     /// How far the open drawers reach left of the board: the sidebar's width, or in a right-to-left layout, where
     /// AppKit puts the sidebar on the right, the inspector's. The board keeps its place by moving the window that far.
     func extentLeftOfBoard(sidebar:Bool,inspector:Bool)->CGFloat {split.splitView.userInterfaceLayoutDirection == .rightToLeft ? (inspector ? rightExtent:0):(sidebar ? leftExtent:0)}
@@ -245,10 +264,10 @@ final class BoardTitleView:NSView {
     @objc func toggleRight(){desiredRight.toggle();rememberPanes();animateDrawers()}
     private func rememberPanes(){model.session.state.window.left=desiredLeft;model.session.state.window.right=desiredRight;model.session.emit(semantic:false,save:true)}
     func showDetails(){if !desiredRight{desiredRight=true;rememberPanes();animateDrawers()}}
-    func animateDrawers(){
+    func animateDrawers(reconcile:Bool=false){
         guard !animating,!fullscreenTransition,let window=window else{return}
         let changeLeft=sidebarItem.isCollapsed==desiredLeft,changeRight=inspectorItem.isCollapsed==desiredRight
-        guard changeLeft || changeRight else{return};animating=true
+        guard changeLeft || changeRight || reconcile else{return};animating=true
         let width=fixedBoardWidth ?? main.view.widthAnchor.constraint(equalToConstant:main.view.frame.width);fixedBoardWidth=width
         let available=availableFrameOverride ?? window.screen?.visibleFrame ?? window.frame
         let core=coreFrame ?? window.frame,left=desiredLeft ? leftExtent:0,right=desiredRight ? rightExtent:0
@@ -261,7 +280,6 @@ final class BoardTitleView:NSView {
         let targetCore=fullscreen ? max(1,split.view.bounds.width-left-right):max(Metrics.minimumFitted,target.width-left-right)
         if !fullscreen{target.size.width=targetCore+left+right}
         let targetWidth=fullscreen ? split.view.bounds.width:target.width
-        boardItem.minimumThickness=min(Metrics.minimum,max(Metrics.minimumFitted,targetCore))
         let outward = !fullscreen && !fittedLayout && abs(main.view.frame.width-core.width)<1
         sidebarItem.collapseBehavior = fullscreen ? .preferResizingSiblingsWithFixedSplitView:.preferResizingSplitViewWithFixedSiblings
         inspectorItem.collapseBehavior=sidebarItem.collapseBehavior
@@ -273,10 +291,19 @@ final class BoardTitleView:NSView {
         if !fullscreen,let native=window as? BoardWindow{native.drawerViewport=available;native.drawerOrigins=min(window.frame.minX,target.minX)...max(window.frame.minX,target.minX)}
         NSAnimationContext.runAnimationGroup{context in
             context.allowsImplicitAnimation=true;context.duration=NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0:Metrics.drawerAnimation;context.timingFunction=CAMediaTimingFunction(name:.easeInEaseOut)
-            width.constant=targetCore
+            // Grow the width before raising its minimum, and lower the minimum
+            // before shrinking the width, so the two required constraints agree.
+            let minimum=min(Metrics.minimum,max(Metrics.minimumFitted,targetCore))
+            if targetCore>=width.constant{width.constant=targetCore;boardItem.minimumThickness=minimum}
+            else{boardItem.minimumThickness=minimum;width.constant=targetCore}
             if changeLeft{sidebarItem.animator().isCollapsed = !desiredLeft}
             if changeRight{inspectorItem.animator().isCollapsed = !desiredRight}
-        } completionHandler:{[weak self] in MainActor.assumeIsolated{guard let self=self else{return};self.window?.contentView?.layoutSubtreeIfNeeded();self.titleView.syncCenter();(self.window as? BoardWindow)?.drawerOrigins=nil;(self.window as? BoardWindow)?.drawerViewport=nil;self.fittedOrigin=self.window?.frame.origin;self.animating=false;self.animateDrawers()}}
+        } completionHandler:{[weak self] in MainActor.assumeIsolated{guard let self=self else{return};self.window?.contentView?.layoutSubtreeIfNeeded();self.titleView.syncCenter();(self.window as? BoardWindow)?.drawerOrigins=nil;(self.window as? BoardWindow)?.drawerViewport=nil;self.fittedOrigin=self.window?.frame.origin;self.animating=false
+            let actualLeft=self.sidebarItem.isCollapsed ? 0:self.leftExtent,actualRight=self.inspectorItem.isCollapsed ? 0:self.rightExtent
+            // Opening a pane can install new system chrome. Refit once using its
+            // measured extent, including when a constrained viewport is in use.
+            self.animateDrawers(reconcile:abs(actualLeft-left)>1 || abs(actualRight-right)>1)
+        }}
     }
 
     @objc func selectTab(){model.session.selectPresentation(titleView.tabs.selectedSegment==1)}
@@ -450,8 +477,8 @@ playbackLineView?.isHidden=model.reviewWorkspace
         if s.mode == .network{setTitle(model.network.title,subtitle:model.network.notice ?? "")}
         else if s.mode == .practice{setTitle(String(localized:"Practice",bundle:.checkmate),subtitle:s.humanSide=="b" ? String(localized:"Black vs Stockfish",bundle:.checkmate):String(localized:"White vs Stockfish",bundle:.checkmate))}
         else if s.mode == .puzzles{setTitle(String(localized:"Quick puzzles",bundle:.checkmate))}
-        else if l.mini{setTitle(l.miniKind.title)}
-        else if s.mode == .training{setTitle(model.shownTrainingExercise?.definition.title ?? String(localized:"Training",bundle:.checkmate))}
+        else if l.mini{setTitle(ChineseContent.text(l.miniKind.title))}
+        else if s.mode == .training{setTitle(model.shownTrainingExercise.map{ChineseContent.text($0.definition.title)} ?? String(localized:"Training",bundle:.checkmate))}
         else {setTitle(l.localizedTitle(index:l.lessonIndex),subtitle:l.attemptStatus ?? "")}
         let temporary=s.preview != nil || s.demonstration != nil;titleView.label.isHidden=temporary;titleView.tabs.isHidden = !temporary;titleView.tabs.setLabel(s.demonstration != nil ? String(localized:"Demonstration",bundle:.checkmate):String(localized:"Try a Move",bundle:.checkmate),forSegment:1);titleView.tabs.selectedSegment=s.presentationHidden ? 0:1;titleView.needsLayout=true
     }
@@ -548,7 +575,7 @@ playbackLineView?.isHidden=model.reviewWorkspace
             if model.learning.miniGame?.history.isEmpty != false{model.learning.restartMini();return}
             // The sheet answers for the mini-game it was shown over: one replaced meanwhile (an agent, a restart) is kept.
             let shown=model.learning.miniGame.map{($0.kind,$0.opponentSeed)}
-            let alert=NSAlert.destructive(String(localized:"Start a new \(model.learning.miniKind.title) game?",bundle:.checkmate),String(localized:"This replaces the current mini-game.",bundle:.checkmate),action:String(localized:"New Game",bundle:.checkmate));present(alert){[weak self] response in guard response == .alertFirstButtonReturn,let self,self.model.learning.mini,let game=self.model.learning.miniGame,let shown,game.kind==shown.0,game.opponentSeed==shown.1 else{return};self.model.learning.restartMini()};return
+            let alert=NSAlert.destructive(String(localized:"Start a new \(ChineseContent.text(model.learning.miniKind.title)) game?",bundle:.checkmate),String(localized:"This replaces the current mini-game.",bundle:.checkmate),action:String(localized:"New Game",bundle:.checkmate));present(alert){[weak self] response in guard response == .alertFirstButtonReturn,let self,self.model.learning.mini,let game=self.model.learning.miniGame,let shown,game.kind==shown.0,game.opponentSeed==shown.1 else{return};self.model.learning.restartMini()};return
         }
         guard model.session.mode == .practice else{return};let a=NSAlert();a.messageText=String(localized:"Start a new game?",bundle:.checkmate);a.informativeText=model.session.state.practice.previousGame.isEmpty ? String(localized:"Your current game will be available under Restore Previous Game.",bundle:.checkmate):String(localized:"Your current game will be available under Restore Previous Game, replacing the game kept there now.",bundle:.checkmate)
         let choices=NewGameChoices.view(settings:model.session.state.settings,side:model.session.humanSide);a.accessoryView=choices.view

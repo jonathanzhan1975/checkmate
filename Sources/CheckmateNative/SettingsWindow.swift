@@ -157,7 +157,7 @@ private struct InterfaceLanguageSettings: View {
             Picker("Interface language", selection: $selection) {
                 Text("Follow System").tag("system")
                 Text(verbatim: "简体中文").tag("zh-Hans")
-                Text(verbatim: "English").tag("en")
+                Text(verbatim: "English").tag("en") // not localized: language self-name
             }
             .accessibilityIdentifier("interface-language")
             .onChange(of: selection) { _, value in

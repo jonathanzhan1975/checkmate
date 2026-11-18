@@ -63,7 +63,7 @@ struct TrainingLibraryView:View {
         if let notice=training.notice{Text(notice).accessibilityIdentifier("training-notice")}
         ForEach(training.keptForNewerVersion,id:\.self){Text($0).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true).accessibilityIdentifier("training-newer-version")}
         if let active=training.resumable,offered(active.entry),let definition=training.catalog?.entry(active.entry) {
-            Button{model.resumeTraining()}label:{Label("Continue \(definition.title)",symbol:.play)}.controlSize(.large).accessibilityIdentifier("training-continue")
+            Button{model.resumeTraining()}label:{Label("Continue \(ChineseContent.text(definition.title))",symbol:.play)}.controlSize(.large).accessibilityIdentifier("training-continue")
         }
         let suggestions=training.suggestions.filter{offered($0.item.entry)}
         if !suggestions.isEmpty {
@@ -72,7 +72,7 @@ struct TrainingLibraryView:View {
             ForEach(Array(suggestions.enumerated()),id:\.element.item.id){position,suggestion in
                 HStack(alignment:.top){
                     VStack(alignment:.leading,spacing:2){
-                        Text(training.catalog?.entry(suggestion.item.entry)?.title ?? suggestion.item.entry).font(.headline)
+                        Text(ChineseContent.text(training.catalog?.entry(suggestion.item.entry)?.title ?? suggestion.item.entry)).font(.headline)
                         Text(suggestion.explanation).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                     }
                     Spacer(minLength:0)
@@ -95,8 +95,8 @@ struct TrainingLibraryView:View {
         Button{open(entry)}label:{HStack(alignment:.top){
             (entry.legacyKind != nil ? AppSymbol.gameActivity:.exercise).image.frame(width:Metrics.padding*2).accessibilityHidden(true)
             VStack(alignment:.leading,spacing:2){
-                HStack{Text(entry.title).font(.headline);Text(entry.origin == .existing ? String(localized:"Existing game",bundle:.checkmate):entry.increment == .beginner ? String(localized:"Preview",bundle:.checkmate,comment:"Badge: this item can be tried before it is unlocked"):String(localized:"New",bundle:.checkmate,comment:"Badge: this item has not been played yet")).font(.caption).padding(.horizontal,Metrics.tightGap).background(.quaternary,in:Capsule())}
-                Text(entry.summary).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+                HStack{Text(ChineseContent.text(entry.title)).font(.headline);Text(entry.origin == .existing ? String(localized:"Existing game",bundle:.checkmate):entry.increment == .beginner ? String(localized:"Preview",bundle:.checkmate,comment:"Badge: this item can be tried before it is unlocked"):String(localized:"New",bundle:.checkmate,comment:"Badge: this item has not been played yet")).font(.caption).padding(.horizontal,Metrics.tightGap).background(.quaternary,in:Capsule())}
+                Text(ChineseContent.text(entry.summary)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                 Text(TrainingLabels.ruleMode(entry.ruleMode)).font(.caption).foregroundStyle(.secondary)
                 ForEach(TrainingRecommendation.progress(entry.id,in:training.training).lines,id:\.self){Text($0).font(.caption)}
                 if let kind=entry.legacyKind,session.state.miniGames?[kind.rawValue] != nil{Text("Your saved game resumes.").font(.caption).foregroundStyle(.secondary)}

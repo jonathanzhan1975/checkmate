@@ -83,7 +83,7 @@ struct SidebarContent:View {
         // The mini-games, otherwise reached only inside their lessons (L-33). Each opens from its lesson, as there.
         // Closed during a network game, they are disabled and say why as each row's value, not only on hover (D-33).
         Section("Mini-games"){
-            ForEach(SidebarSelection.miniGames(learning.library),id:\.kind){entry in Label(entry.kind.title,symbol:.miniGame).accessibilityIdentifier("sidebar-mini-"+entry.kind.rawValue).tag("mini:"+entry.kind.rawValue).closedRow(participating).accessibilityValue(closedReason ?? "").help(closedReason ?? "")}
+            ForEach(SidebarSelection.miniGames(learning.library),id:\.kind){entry in Label(ChineseContent.text(entry.kind.title),symbol:.miniGame).accessibilityIdentifier("sidebar-mini-"+entry.kind.rawValue).tag("mini:"+entry.kind.rawValue).closedRow(participating).accessibilityValue(closedReason ?? "").help(closedReason ?? "")}
         }
         // A practice lesson sits indented under its piece lesson, off the main path but one click away. It is a lesson
         // (it teaches its mini-games' rules, then offers them), so it has the lesson icon: the game controller marks only
@@ -165,7 +165,7 @@ struct DetailContent:View {
         if let error=session.error {Text(error).foregroundStyle(Color(nsColor:NativeColors.error));Button("Retry Stockfish"){session.retryEngine()}}
     }
     @ViewBuilder private var miniDetail:some View {
-        Text(learning.miniStatus).font(.title2.bold())
+        Text(ChineseContent.text(learning.miniStatus)).font(.title2.bold())
         if !learning.miniKind.solo {
             // Labels in one column and popups in the next, as practice's opponent settings are.
             Grid(alignment:.leading,horizontalSpacing:Metrics.smallGap,verticalSpacing:Metrics.smallGap){
@@ -192,8 +192,8 @@ struct DetailContent:View {
         }
         if let record=learning.miniRecordText {Text(record).foregroundStyle(.secondary).accessibilityIdentifier("mini-record")}
         if learning.miniGame?.isFinished==true {Button {learning.restartMini()} label:{Label("Play again",symbol:.startOver)}.accessibilityIdentifier("mini-play-again");miniAdvice;MiniGameReviewSection(reviewer:learning.miniReview);MiniGameShownFact(learning:learning)}
-        Text(learning.miniKind.rules).foregroundStyle(.secondary)
-        if !learning.feedback.isEmpty{Text(learning.feedback)}
+        Text(ChineseContent.text(learning.miniKind.rules)).foregroundStyle(.secondary)
+        if !learning.feedback.isEmpty{Text(ChineseContent.text(learning.feedback,locale:session.state.settings.lessonLanguage))}
     }
     /// The step the learner's last `MiniGameRecord.streakLength` results at one level suggest (L-24), never taken unasked.
     @ViewBuilder private var miniAdvice:some View {
@@ -207,7 +207,7 @@ struct DetailContent:View {
         if session.mode == .lesson {
             if learning.practiceAvailable {
                 ForEach(MiniGameKind.available(lessonID:learning.current.id),id:\.self){kind in
-                    Button {learning.startMini(kind)} label:{Label("Play \(kind.title)",symbol:.play)}
+                    Button {learning.startMini(kind)} label:{Label("Play \(ChineseContent.text(kind.title))",symbol:.play)}
                         .controlSize(.large).accessibilityIdentifier("lesson-play-"+kind.rawValue)
                 }
                 ForEach(learning.library.practice(for:learning.lessonIndex),id:\.self){index in
@@ -227,17 +227,17 @@ struct DetailContent:View {
             if let fallback=learning.fallbackMessage{Text(fallback).font(.caption).foregroundStyle(.secondary)}
             Text(learning.subtitle).textSelection(.enabled)
         } else {
-            if let prompt=learning.exercise?.prompt {Text(prompt).font(.title2.bold())}
-            Text(learning.activePuzzle?.context ?? learning.subtitle).textSelection(.enabled)
-            ForEach(Array(learning.hintTexts.enumerated()),id:\.offset){index,hint in Text("Hint \(index+1): \(hint)").foregroundStyle(.secondary).accessibilityIdentifier("puzzle-hint-\(index+1)")}
+            if let prompt=learning.exercise?.prompt {Text(ChineseContent.text(prompt,locale:session.state.settings.lessonLanguage)).font(.title2.bold())}
+            Text(ChineseContent.text(learning.activePuzzle?.context ?? learning.subtitle,locale:session.state.settings.lessonLanguage)).textSelection(.enabled)
+            ForEach(Array(learning.hintTexts.enumerated()),id:\.offset){index,hint in Text("Hint \(index+1): \(ChineseContent.text(hint,locale:session.state.settings.lessonLanguage))").foregroundStyle(.secondary).accessibilityIdentifier("puzzle-hint-\(index+1)")}
         }
         if let e=learning.activePuzzle?.exercise {
-            if e.kind=="choice" {ForEach(e.choices ?? [],id:\.self){choice in Button(choice){learning.choose(choice)}.disabled(learning.passed)}}
+            if e.kind=="choice" {ForEach(e.choices ?? [],id:\.self){choice in Button(ChineseContent.text(choice,locale:session.state.settings.lessonLanguage)){learning.choose(choice)}.disabled(learning.passed)}}
             if e.kind=="squares" {if e.answers?.count != 1{Button("Check My Answer"){learning.checkAnswer()}.disabled(learning.picked.isEmpty || learning.passed)};if e.allowNone==true{Button("No Squares"){learning.noSquares()}.disabled(learning.passed)}}
             if e.kind=="path"{Button("Restart Path"){learning.restartPath()}}
             HStack{Button(learning.puzzleHints==0 ? String(localized:"Hint",bundle:.checkmate,comment:"Noun: ask for a hint"):String(localized:"Another Hint",bundle:.checkmate)){learning.hint()}.disabled(!learning.canHint).accessibilityIdentifier("puzzle-hint");Button("Reveal Answer"){learning.reveal()}.disabled(learning.passed)}
         }
-        if !learning.feedback.isEmpty{Text(learning.feedback).foregroundStyle(.secondary)}
+        if !learning.feedback.isEmpty{Text(ChineseContent.text(learning.feedback,locale:session.state.settings.lessonLanguage)).foregroundStyle(.secondary)}
         if session.mode == .lesson {
             // The title toggles too; by default only the chevron does.
             DisclosureGroup(isExpanded:$lessonGoalsShown){BulletedLines(lines:learning.teaches)} label:{Text("In this lesson").contentShape(Rectangle()).onTapGesture{lessonGoalsShown.toggle()}}
@@ -421,10 +421,10 @@ struct PuzzleLibraryContent:View {
         let due=learning.dueCount,mix=learning.todayMix;if due>0 || !mix.isEmpty{HStack(spacing:Metrics.smallGap){if !mix.isEmpty{Button(TodayMix.title){learning.startTodayMix()}.help(TodayMix.detail).accessibilityIdentifier("puzzle-today-mix")};if due>0{Button(String(localized:"Review Due (\(due))",bundle:.checkmate,comment:"Opens the puzzles due for review; the number is how many")){learning.reviewDue()}.accessibilityIdentifier("puzzle-review-due")}}}
         if let summary=learning.setSummary {GroupBox {VStack(alignment:.leading,spacing:Metrics.smallGap){if learning.mixFinished {Text(TodayMix.finished).sectionHeading()} else {Text("You Reached the End of This Set").sectionHeading()};Text(summary.text);if summary.toReview>0{Button("Review Mistakes"){learning.reviewMistakes()}.accessibilityIdentifier("puzzle-review-mistakes")}}.frame(maxWidth:.infinity,alignment:.leading)}.accessibilityElement(children:.contain).accessibilityIdentifier("puzzle-set-summary")}
         TextField("Search exercises",text:$learning.query).textFieldStyle(.roundedBorder)
-        HStack {Picker("Topic",selection:$learning.topic){Text("All topics").tag(String?.none);ForEach(learning.topicGroups,id:\.title){group in Section(group.title){ForEach(group.topics,id:\.self){Text($0).tag(String?.some($0))}}}};Picker("Level",selection:$learning.level){Text("All levels").tag(String?.none);ForEach(learning.levels,id:\.self){Text($0).tag(String?.some($0))}};Picker("Status",selection:$learning.filter){ForEach(PuzzleStatusFilter.allCases,id:\.self){Text($0.title).tag($0)}}}
+        HStack {Picker("Topic",selection:$learning.topic){Text("All topics").tag(String?.none);ForEach(learning.topicGroups,id:\.title){group in Section(BundledLessonText.label(group.title,locale:session.state.settings.lessonLanguage)){ForEach(group.topics,id:\.self){Text(ChineseContent.text($0,locale:session.state.settings.lessonLanguage)).tag(String?.some($0))}}}};Picker("Level",selection:$learning.level){Text("All levels").tag(String?.none);ForEach(learning.levels,id:\.self){Text(ChineseContent.text($0,locale:session.state.settings.lessonLanguage)).tag(String?.some($0))}};Picker("Status",selection:$learning.filter){ForEach(PuzzleStatusFilter.allCases,id:\.self){Text($0.title).tag($0)}}}
         Text(String(localized:"\(puzzles.count) exercises",bundle:.checkmate)).foregroundStyle(.secondary)
         if puzzles.isEmpty{ContentUnavailableView{Label("No matching exercises",symbol:.search)}description:{Text("No exercises match these filters.")}actions:{Button("Clear Filters"){learning.clearFilters()}.disabled(!learning.filtersActive)}.accessibilityIdentifier("puzzle-library-empty")}
-        else{List(puzzles,id:\.id){p in let row=PuzzleRowFormat(p,record:session.state.puzzles[p.id] ?? PuzzleProgress());Button{learning.openPuzzle(id:p.id)}label:{HStack{VStack(alignment:.leading){Text(row.title);Text(row.detail).font(.caption).foregroundStyle(.secondary)};Spacer();if row.review{AppSymbol.toReview.image.foregroundStyle(.secondary).help("To review").accessibilityHidden(true)};if let mark=row.mark,let help=row.markHelp{mark.symbol.image.foregroundStyle(Color(nsColor:NativeColors.success)).help(help).accessibilityHidden(true)}}}.buttonStyle(.plain)
+        else{List(puzzles,id:\.id){p in let row=PuzzleRowFormat(p,record:session.state.puzzles[p.id] ?? PuzzleProgress(),locale:session.state.settings.lessonLanguage);Button{learning.openPuzzle(id:p.id)}label:{HStack{VStack(alignment:.leading){Text(ChineseContent.text(row.title,locale:session.state.settings.lessonLanguage));Text(ChineseContent.text(row.detail,locale:session.state.settings.lessonLanguage)).font(.caption).foregroundStyle(.secondary)};Spacer();if row.review{AppSymbol.toReview.image.foregroundStyle(.secondary).help("To review").accessibilityHidden(true)};if let mark=row.mark,let help=row.markHelp{mark.symbol.image.foregroundStyle(Color(nsColor:NativeColors.success)).help(help).accessibilityHidden(true)}}}.buttonStyle(.plain)
             .accessibilityValue(row.accessibilityValue)}}
     }.padding(Metrics.sectionGap)}
 }

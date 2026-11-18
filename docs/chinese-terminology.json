@@ -1,0 +1,20 @@
+{
+  "locale": "zh-Hans",
+  "king": "王",
+  "queen": "后",
+  "rook": "车",
+  "bishop": "象",
+  "knight": "马",
+  "pawn": "兵",
+  "check": "将军",
+  "checkmate": "将死",
+  "stalemate": "逼和",
+  "castling": "王车易位",
+  "en passant": "吃过路兵",
+  "promotion": "升变",
+  "fork": "捉双",
+  "skewer": "串击",
+  "pin": "牵制",
+  "White": "白方",
+  "Black": "黑方"
+}

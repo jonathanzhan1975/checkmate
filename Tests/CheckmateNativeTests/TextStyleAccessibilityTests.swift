@@ -28,7 +28,7 @@ final class TextStyleAccessibilityTests:XCTestCase {
             XCTAssertFalse(all.contains("Text(\(heading)).font("),"\(heading) is styled without the heading trait")
         }
         // The library preview's title and the lesson list's course sections are computed headings too.
-        for heading in ["Text(verbatim:preview.title)","Text(group.title)"] {
+        for heading in ["Text(verbatim:preview.title)","Text(BundledLessonText.label(group.title,locale:controller.language))"] {
             XCTAssertTrue(all.contains("\(heading).sectionHeading("),"\(heading) is a heading")
             XCTAssertFalse(all.contains("\(heading).font("),"\(heading) is styled without the heading trait")
         }
