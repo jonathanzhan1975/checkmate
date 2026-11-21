@@ -1,4 +1,5 @@
 import Foundation
+import CheckmateAssets
 /// The rows of a position game's closed outcome matrix (mini-game plan D3), in precedence order: after each ply the
 /// first row that matches decides the game; none matching, it goes on. `claimedDraw` is the learner's claim, which
 /// ends the game where it is made.
@@ -68,7 +69,7 @@ public enum PositionGameReferee {
 /// calibrated on full games, not on small endings.
 public enum TrainingOpponentLevel:String,Codable,CaseIterable {
     case gentle,steady,strong
-    public var title:String {switch self{case .gentle:return "Gentle";case .steady:return "Steady";case .strong:return "Strong"}}
+    public var title:String {switch self{case .gentle:return String(localized:"Gentle",bundle:.checkmate);case .steady:return String(localized:"Steady",bundle:.checkmate);case .strong:return String(localized:"Strong",bundle:.checkmate)}}
 }
 /// How far each level searches (plan D4): every search is node-limited, so a level is the same work on every Mac, as
 /// network hints already are (assistance plan A5). Not yet calibrated (WI-016); a change bumps `version`.

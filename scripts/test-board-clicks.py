@@ -16,6 +16,7 @@ import time
 
 import app_driver
 import test_host
+from ui_locale import arguments as localized_arguments, raw, text, ui
 test_host.require("native pointer acceptance")
 root = pathlib.Path(__file__).resolve().parents[1]
 evidence = pathlib.Path(os.environ["CHECKMATE_EVIDENCE_DIR"])
@@ -55,7 +56,7 @@ def replied(white_move):
 def toggle(name):
     """A toggle's value, or None when the drawer no longer shows it. Any other failure, such as a name that picks out
     several elements, fails the gate rather than reading as a closed drawer."""
-    result = subprocess.run([str(helpers["pointer-helper"]), str(process.pid), "value", name], capture_output=True, text=True)
+    result = subprocess.run([str(helpers["pointer-helper"]), str(process.pid), *localized_arguments(("value", name))], capture_output=True, text=True)
     if result.returncode == 0:
         return result.stdout.strip()
     if result.stderr.startswith("Not found"):
@@ -108,7 +109,7 @@ def launch(existing=None, touch_board=True):
     global process, state
     state = existing or pathlib.Path(tempfile.mkdtemp(prefix="checkmate-board-clicks-state-"))
     process = app_driver.launch(command + ["--data-dir", str(state)], environment)
-    wait(lambda: "Chessboard" in listing(), "Board did not appear")
+    wait(lambda: "AXGrid: Chessboard" in listing(), "Board did not appear")
     time.sleep(1)  # Allow initial AppKit window and drawer restoration to finish.
     # A process launched from a shell may start inactive, and an inactive window's toolbar takes a first click
     # only to activate; activate it first with a click in the board's empty margin, or, without touching the board,
@@ -117,7 +118,7 @@ def launch(existing=None, touch_board=True):
         if touch_board:
             board("activate")
         else:
-            pointer("frame", "Chessboard")
+            pointer("frame", raw("board-square-a1"))
         try:
             wait(lambda: board("active") == "true", "Checkmate did not become active", timeout=5)
             break
@@ -224,12 +225,12 @@ def sketch_marks():
     # selected, so a clean board can only mean the marks were not restored, never that a click cleared them.
     draw()
     squares = [file + rank for rank in "12345678" for file in "abcdefgh"]
-    position = {square: label(square) for square in squares}
-    assert not [text for text in position.values() if "selected" in text], "A square was selected before quitting: " + repr(position)
+    position = {square: str(label(square)) for square in squares}
+    assert not [label for label in position.values() if text(ui("selected")) in label], "A square was selected before quitting: " + repr(position)
     pointer("shortcut", "12", "c")  # Command-Q
     process.wait(timeout=20)
     launch(state, touch_board=False)
-    restored = {square: label(square) for square in squares}
+    restored = {square: str(label(square)) for square in squares}
     assert restored == position, "The relaunched board differs from the one quit: " + repr({square: (position[square], restored[square]) for square in squares if position[square] != restored[square]})
     cleared("Marks drawn before quitting came back after a relaunch, so they reached saved state")
 

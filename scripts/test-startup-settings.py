@@ -9,6 +9,7 @@ import tempfile
 import time
 
 import app_driver
+from ui_locale import raw
 import test_host
 test_host.require("native Settings acceptance")
 
@@ -35,7 +36,7 @@ process = None
 
 def act(action, target=""):
     try:
-        return subprocess.check_output([str(helper), str(process.pid), action, target], text=True)
+        return app_driver.helper_output(helper, process.pid, action, target)
     except subprocess.CalledProcessError:
         listing = subprocess.check_output([str(helper), str(process.pid), "list"], text=True)
         (evidence / "startup-settings-ax.txt").write_text(listing)
@@ -78,6 +79,22 @@ try:
     assert not saved()["settings"]["voiceAutoConnect"]
     assert not saved()["settings"].get("voiceConsent")
     assert saved()["settings"]["companionAutoStart"]
+    assert saved()["settings"]["coachProvider"] == "deepseek"
+    assert not saved()["settings"]["deepSeekConsent"]
+
+    # Verify the new default without starting a provider, microphone or speaker.
+    category("voice")
+    assert raw("DeepSeek · deepseek-flash") in act("list")
+    act("press", "deepseek-speak-answers")
+    wait(lambda: not saved()["settings"]["deepSeekSpeak"])
+    assert not discovery.exists()
+    quit_app()
+
+    # Preserve the original launch-toggle regression with an explicit legacy
+    # fixture. Automation remains silent; no Codex model or credentials are used.
+    document = saved()
+    document["settings"]["coachProvider"] = "openai"
+    state_file.write_text(json.dumps(document))
 
     category("voice")
     listing = act("list")
@@ -110,8 +127,17 @@ try:
     assert not saved()["settings"].get("voiceConsent")
     assert not saved()["settings"]["companionAutoStart"]
     quit_app()
+    document = saved()
+    document["settings"]["coachProvider"] = "deepseek"
+    state_file.write_text(json.dumps(document))
+    launch()
+    assert saved()["settings"]["voiceAutoConnect"], "fixture keeps the legacy intent"
+    assert saved()["settings"]["coachProvider"] == "deepseek"
+    assert not discovery.exists(), "DeepSeek must not start the legacy provider or MCP"
+    quit_app()
     result = {"passed": True, "independentToggles": True, "persistedOptOuts": True, "voiceOptIn": True,
-              "manualMCP": True, "privateDiscovery": True, "silentStartup": True}
+              "manualMCP": True, "privateDiscovery": True, "silentStartup": True,
+              "deepSeekDefault": True, "legacyVoiceFixture": True, "noAutomaticLegacyStartup": True}
     (evidence / "startup-settings-results.json").write_text(json.dumps(result, indent=2))
     print(json.dumps(result))
 finally:

@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-19",
+  "acceptedBy": "user",
+  "statement": "2.003已经很好了，可以算通过",
+  "measuredSeconds": 2.002786875,
+  "measurement": "recordings/chinese-acceptance-20261119/round-recheck2/lifecycle/startup-timing.json",
+  "productFingerprint": "d3e4c9a74a7a6f4e6305f9a04d87f79e7f83c152d0fea63beb7fe3c137fb3a58",
+  "scope": "Only the referenced 2.003-second measurement is manually accepted. This does not approve later timing samples. Source fingerprint identifies the product tested."
+}

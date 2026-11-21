@@ -6,10 +6,25 @@ import CheckmateDomain
 import CheckmateSupport
 import PCM16
 
+/// The coach coordinates speech state; the concrete system driver owns hardware
+/// access and its automation guard. Tests can provide a silent stateful driver.
+@MainActor public protocol ChineseCoachSpeechDriving:AnyObject {
+    var listening:Bool {get}
+    var speaking:Bool {get}
+    var onTranscript:((String)->Void)? {get set}
+    var onFailure:((String)->Void)? {get set}
+    var onStateChange:(()->Void)? {get set}
+    func startListening(device:String)async throws
+    func finishListening()
+    func speak(_ text:String,volume:Float)
+    func stopSpeaking()
+    func stop()
+}
+
 /// Speech input and output are independent of the reasoning provider. No Codex
 /// credentials, model or service are used. Capture and playback take turns to
 /// prevent the synthesized answer from being recognized as another question.
-@MainActor public final class ChineseCoachSpeech:NSObject,AVSpeechSynthesizerDelegate {
+@MainActor public final class ChineseCoachSpeech:NSObject,ChineseCoachSpeechDriving,AVSpeechSynthesizerDelegate {
     public private(set) var listening=false,speaking=false
     public var onTranscript:((String)->Void)?,onFailure:((String)->Void)?,onStateChange:(()->Void)?
     private let input=VoiceAudio(),synthesizer=AVSpeechSynthesizer()

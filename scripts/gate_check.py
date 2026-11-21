@@ -61,6 +61,9 @@ def check_result(evidence: pathlib.Path, file: str, requires: tuple = ()) -> Non
 
 
 def check_gate(evidence: pathlib.Path, gate: dict) -> None:
+    if gate.get('localizedUI'):
+        from ui_locale import verify_evidence
+        verify_evidence(evidence,gate_name=gate['name'])
     if gate['name'] == 'unit':
         check_unit(evidence)
     else:

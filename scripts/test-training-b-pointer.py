@@ -5,8 +5,8 @@ subskill chip, the promotion chooser cancelled and then answered, a normal-chess
 a Finish the Game move answered by the bundled offline Stockfish defender, then taken back, the position games listed
 under the preview caption and one of them played, its move answered by Stockfish, the opponent level picker on a game
 whose calibration offers several levels (a game with no move takes the level, one in progress keeps its own and offers
-a new game at it) and none on one whose calibration offers one, the training game's voice coach connected from the bar
-and disconnected from the drawer with the silent voice double (connecting records no help), a mixed case whose topic
+a new game at it) and none on one whose calibration offers one, the default DeepSeek training card opened from the bar
+and a consented Chinese question answered through silent fixtures (opening records no help), a mixed case whose topic
 appears only after the answer, a guided game played, ended and reviewed, a pawn race won and reviewed, and a related lesson read and left for
 training. The app runs with its own automation identifier and data directory, with training, its B preview, position
 games and the training voice coach enabled.
@@ -21,6 +21,8 @@ import tempfile
 import time
 
 import app_driver
+import ui_locale
+from ui_locale import raw, ui
 import test_host
 test_host.require("native pointer acceptance")
 root = pathlib.Path(__file__).resolve().parents[1]
@@ -29,9 +31,11 @@ evidence.mkdir(parents=True, exist_ok=True)
 state = pathlib.Path(tempfile.mkdtemp(prefix="checkmate-training-b-pointer-state-"))
 atexit.register(shutil.rmtree, state, ignore_errors=True)
 helpers = app_driver.compile_helpers(evidence, {"pointer-helper": "training-b-pointer-helper", "ax-helper": "training-b-pointer-ax-helper"})
-# The silent voice double stands in for the realtime service: nothing leaves the Mac, no audio plays, no microphone opens.
-command = [str(root / "build/CheckmateAutomation.app/Contents/MacOS/CheckmateNative"), "--automation", "--data-dir", str(state), "--voice-double"]
+# Explicit silent DeepSeek fixtures keep the real Chinese controls and avoid network/audio.
+command = [str(root / "build/CheckmateAutomation.app/Contents/MacOS/CheckmateNative"), "--automation", "--data-dir", str(state)]
 environment = app_driver.without_automation()
+environment["CHECKMATE_DEEPSEEK_FIXTURE"] = "1"
+environment["DEEPSEEK_API_KEY"] = "sk-checkmate-fixture-only"
 environment["CHECKMATE_TRAINING_ENABLED"] = "1"
 environment["CHECKMATE_TRAINING_B"] = "1"
 # Position games and opponent levels (mini-game plan WI-017), default off for users.
@@ -47,6 +51,13 @@ COLOURS = {"w": "White", "b": "Black"}
 POSITION_ENTRIES = ("pawn-race", "pawn-war", "cut-down-chess", "two-bishop-mate")
 OFFERED = {f"{v['entry']}/{v['variant']}": v["offered"] for v in json.loads((root / "Content/calibration/position-game-results.json").read_text())["verdicts"]}
 TITLES = {"gentle": "Gentle", "steady": "Steady", "strong": "Strong"}
+
+
+def opponent_title(level):
+    if ui_locale.language().startswith("zh"):
+        template = json.loads((root / "Sources/CheckmateCore/Localizable.xcstrings").read_text())["strings"]["Opponent (%@)"]["localizations"]["zh-Hans"]["stringUnit"]["value"]
+        return raw(template.replace("%1$@", ui_locale.text(ui(TITLES[level]))).replace("%@", ui_locale.text(ui(TITLES[level]))))
+    return raw(f"Opponent ({TITLES[level]})")
 
 
 def training_status():
@@ -167,7 +178,7 @@ try:
     pointer("click", "Training")
     wait(lambda: "training-entry-reach-target" in listing(), "Clicking Training did not open the library")
     tree = listing()
-    beginner_library = all("training-entry-" + entry in tree for entry in ("save-your-piece", "capture-wisely", "special-moves", "simple-tactics", "finish-the-game")) and "Preview: these exercises" in tree
+    beginner_library = all("training-entry-" + entry in tree for entry in ("save-your-piece", "capture-wisely", "special-moves", "simple-tactics", "finish-the-game")) and "Preview: these exercises are machine-checked, but an editor has not reviewed them yet." in tree
     assert beginner_library, "The Beginner skills section did not list its entries with the preview caption"
 
     # A subskill chip starts that variant: promotion.
@@ -251,7 +262,7 @@ try:
     # The position games (mini-game plan WI-020), listed under the preview caption, which says they are machine-checked.
     open_library()
     tree = listing()
-    position_games_listed = all("training-entry-" + entry in tree for entry in POSITION_ENTRIES) and "Preview: these exercises" in tree
+    position_games_listed = all("training-entry-" + entry in tree for entry in POSITION_ENTRIES) and "Preview: these exercises are machine-checked, but an editor has not reviewed them yet." in tree
     assert position_games_listed, "The position games are not listed under the preview caption"
 
     # A cut-down game with several calibrated levels: a dragged pawn move answered by Stockfish, then the level picker.
@@ -283,21 +294,37 @@ try:
     wait(lambda: "training-new-level" not in listing(), "The new game still offered another one")
     level_picker = True
 
-    # The training game's voice coach (mini-game plan WI-021), on this fresh game: the bar's microphone connects it,
-    # connecting records no help, and the drawer's Disconnect Coach ends it.
+    # Opening the default coach records no help; explicitly asking does, without moving either board.
+    assert (saved().get("settings") or {}).get("coachProvider", "deepseek") == "deepseek"
     assert not active().get("recordedHelp"), "fixture: the new game already had recorded help"
     pointer("click", "bar-voiceConnect")
-    # The first Connect asks once what voice sends (V-1); only the sheet's Agree connects, and it is remembered.
-    wait(lambda: "voice-consent-connect" in listing(), "The first Connect did not ask for consent")
-    pointer("click", "voice-consent-connect")
-    wait(lambda: (saved().get("settings") or {}).get("voiceConsent") is True, "Agreeing to voice was not saved")
-    wait(lambda: "training-voice-disconnect" in listing() and "training-voice-status" in listing(), "Connecting the training coach did not open its session")
+    wait(lambda: "deepseek-ask" in listing(), "The default DeepSeek card did not open")
     time.sleep(SAVE_SETTLE)
-    assert not active().get("recordedHelp") and not active()["actions"], "Connecting the coach recorded help"
-    pointer("click", "training-voice-disconnect")
-    wait(lambda: "training-voice-connect" in listing() and "training-voice-disconnect" not in listing(), "Disconnect Voice Coach did not end the session")
-    time.sleep(SAVE_SETTLE)
-    assert not active().get("recordedHelp"), "The coach's session recorded help"
+    assert not active().get("recordedHelp") and not active()["actions"], "Opening the coach recorded help"
+    receipt_path = state / "DeepSeekFixture/receipt.json"
+    def receipt():
+        return json.loads(receipt_path.read_text())
+    assert not receipt()["requests"], "Opening the coach sent a request"
+    before_actions = active()["actions"]
+    training_fen = active()["scenario"]["fen"]
+    pointer("click", "deepseek-ask")
+    pointer("type", raw("请解释当前训练棋盘。"))
+    pointer("click", "deepseek-send")
+    wait(lambda: "deepseek-consent-agree" in listing(), "The first question did not ask for consent")
+    pointer("click", "deepseek-consent-agree")
+    wait(lambda: "这是针对当前显示局面的受控中文回答。" in listing(), "The Chinese training answer was not rendered")
+    wait(lambda: active().get("recordedHelp") is True, "The answer did not record training help")
+    requests = receipt()["requests"]
+    (evidence / "training-deepseek-receipt.json").write_text(json.dumps(receipt(), ensure_ascii=False, indent=2))
+    assert len(requests) == 1, "A single question did not issue exactly one request"
+    question = requests[0]["messages"][-1]["content"]
+    context = json.loads(question.split("本轮已验证棋局数据：\n", 1)[1])
+    assert context["training"]["startFEN"] == training_fen and context["training"]["fen"] == training_fen, "The question did not use the training board"
+    assert active()["actions"] == before_actions, "Asking the coach moved the training board"
+    assert receipt()["microphoneStarts"] == 0, "A typed question opened the microphone"
+    pointer("click", "deepseek-stop")
+    wait(lambda: not receipt()["speaking"], "Stop did not end the answer reading")
+    (evidence / "training-deepseek-receipt.json").write_text(json.dumps(receipt(), ensure_ascii=False, indent=2))
     training_voice = True
 
     # Mixed practice: no topic before the answer; after it, the topic is shown.
@@ -321,7 +348,7 @@ try:
     wait(lambda: label(target).startswith(f"{target}, {COLOURS[learner]}, knight"), "The guided-game move did not land")
     wait(lambda: any("reply" in action for action in active()["actions"]), "The guided-game opponent did not answer", timeout=30)
     # The review names the opponent by the level the game froze, read while the attempt is still the active one.
-    guided_opponent = f"Opponent ({TITLES[active()['opponent']['profile']]})"
+    guided_opponent = opponent_title(active()["opponent"]["profile"])
     pointer("click", "training-end-game")
     wait(lambda: "Game ended · not counted" in listing(), "Ending the guided game did not show its neutral result")
     guided_game = True
@@ -371,7 +398,7 @@ try:
         wait(lambda: attempts() and attempts()[-1]["entry"] == "pawn-race" and attempts()[-1]["outcome"] == "correct" and attempts()[-1].get("level") == level, "")
     except AssertionError:
         raise AssertionError(f"The pawn race was not recorded won at {level}: {(attempts() or [None])[-1]}") from None
-    position_opponent = f"Opponent ({TITLES[level]})"
+    position_opponent = opponent_title(level)
     pointer("click", "training-review-game")
     wait(lambda: "review-document-actions" in listing() and position_opponent in listing(), f"Review this game did not open the pawn race in Review naming {position_opponent}")
     pointer("click", "Return to Game")
@@ -389,7 +416,7 @@ try:
     assert (saved().get("course") or {}).get("lessonID") == bookmark, "Reading a linked lesson moved the course bookmark"
     lesson_link = True
 
-    result = {"passed": True, "beginnerLibrary": beginner_library, "variantChip": variant_chip, "promotionCancelled": promotion_cancelled,
+    result = {"passed": True, "deepSeekDefault": True, "beginnerLibrary": beginner_library, "variantChip": variant_chip, "promotionCancelled": promotion_cancelled,
               "promotionChosen": promotion_chosen, "bridgeOpened": bridge_opened, "endingReply": ending_reply, "endingTakeBack": ending_take_back, "barAndCommandZTakeBack": bar_and_command_z_take_back, "levelPicker": level_picker, "trainingVoice": training_voice,
               "positionGamesListed": position_games_listed, "positionGameReply": position_game_reply,
               "mixedTopicAfterAnswer": mixed_topic_after_answer, "guidedGame": guided_game, "guidedReview": guided_review, "positionGameReview": position_game_review, "lessonLink": lesson_link}

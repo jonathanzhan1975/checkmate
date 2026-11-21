@@ -14,6 +14,10 @@ import subprocess
 import tempfile
 import time
 
+# This original pseudolanguage check exercises mirrored layout with English fallback.
+# It is supplemental directionality coverage, never Chinese acceptance evidence.
+os.environ["CHECKMATE_TEST_LANGUAGE"] = "en"
+
 import app_driver
 import test_host
 test_host.require("native right-to-left acceptance")

@@ -29,6 +29,18 @@ import CheckmateCore
         flow.next();flow.placement = .knowsRules;flow.skip()
         XCTAssertEqual(closed,1);XCTAssertEqual(model.learning.lessonIndex,before);XCTAssertEqual(model.session.state.settings,settings)
     }
+    func testPlacedLessonTitleFollowsTheCourseLanguageWithoutChangingItsSource()throws {
+        let model=try NativeModel();defer{model.shutdown()}
+        let flow=OnboardingFlow(model:model){};flow.placement = .knowsMoves
+        let index=try XCTUnwrap(Onboarding.lessonIndex(.knowsMoves,in:model.learning.library))
+        let before=model.learning.lessonIndex
+        var settings=model.session.state.settings;settings.lessonLanguage="zh-Hans";model.session.updateSettings(settings)
+        XCTAssertEqual(flow.lessonTitle,"安全格")
+        XCTAssertEqual(model.learning.library.lessons[index].title,"Safe Squares")
+        XCTAssertEqual(model.learning.lessonIndex,before,"Reading the translated title must not start or move the lesson")
+        settings.lessonLanguage="en";model.session.updateSettings(settings)
+        XCTAssertEqual(flow.lessonTitle,"Safe Squares")
+    }
     /// What the next launch decides, read from the data folder the way the app reads it before its model loads.
     private func welcomedOnLaunch()throws->Bool {Onboarding.shows(firstRun:try !StateStore(directory:directory).hasSavedProgress(),silent:false,requested:false)}
     func testStartingOrSkippingIsRememberedAtOnceAndAcrossLaunches()throws {

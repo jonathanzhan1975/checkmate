@@ -17,6 +17,7 @@ import time
 import app_driver
 import sidebar_lessons
 import test_host
+from ui_locale import raw, language, text as expected_text, course as expected_course, content as expected_content
 test_host.require("native pointer acceptance")
 root = pathlib.Path(__file__).resolve().parents[1]
 evidence = pathlib.Path(os.environ["CHECKMATE_EVIDENCE_DIR"])
@@ -24,8 +25,11 @@ evidence.mkdir(parents=True, exist_ok=True)
 state = pathlib.Path(tempfile.mkdtemp(prefix="checkmate-pointer-state-"))
 # Removed at exit, after the finally below has stopped the app (run-gates fails a gate that leaves temporary files).
 atexit.register(shutil.rmtree, state, ignore_errors=True)
-helpers = app_driver.compile_helpers(evidence, {"pointer-helper": "pointer-helper", "ax-helper": "pointer-ax-helper"})
+helpers = app_driver.compile_helpers(evidence, {"pointer-helper": "pointer-helper", "ax-helper": "pointer-ax-helper", "window-test-helper": "pointer-window-helper"})
 command = [str(root / "build/CheckmateAutomation.app/Contents/MacOS/CheckmateNative"), "--automation", "--data-dir", str(state)]
+legacy_voice_fixture = os.environ.get('CHECKMATE_LEGACY_UI_FIXTURE') == '1'
+if legacy_voice_fixture:
+    command.append('--legacy-voice-fixture')
 environment = app_driver.without_automation()
 # The unsaved-reviews quit alert is shown (not auto-answered) so its buttons are clicked like a person's.
 environment["CHECKMATE_QUIT_ALERT_FIXTURE"] = "1"
@@ -33,6 +37,63 @@ app_bundle = root / "build/CheckmateAutomation.app"
 process = None
 app = app_driver.App(helpers, lambda: process)
 pointer, listing, label, wait = app.pointer, app.listing, app.label, app_driver.wait
+
+def prepare_window():
+    def action(name):
+        return subprocess.check_output([str(helpers['window-test-helper']),str(process.pid),name],text=True,timeout=10).strip()
+    action('center')
+    wait(lambda: action('on-screen')=='true', 'The test window is not fully on the display')
+    (evidence/'pointer-window-geometry.txt').write_text(action('geometry'))
+
+
+def display(key, *arguments):
+    """An explicit UI format expectation; arguments are data, never auto-translated."""
+    catalog = json.loads((root / 'Sources/CheckmateCore/Localizable.xcstrings').read_text())['strings']
+    node = catalog[key].get('localizations', {}).get('zh-Hans' if language().startswith('zh') else 'en', {})
+    if 'variations' in node:
+        forms = node['variations']['plural']
+        node = forms['one' if arguments and arguments[0] == 1 and 'one' in forms else 'other']
+    template = node.get('stringUnit', {}).get('value', key)
+    current = iter(arguments)
+    def replace(match):
+        index = match.group(1)
+        return str(arguments[int(index)-1] if index else next(current))
+    return raw(re.sub(r'%(?:(\d+)\$)?(?:lld|ld|d|@)', replace, template))
+
+
+def system_label(value):
+    labels = {'Go to Folder': '前往文件夹', 'Save': '保存', 'Go': '前往', 'Center': '居中'}
+    return raw(labels.get(value, value) if language().startswith('zh') else value)
+
+
+def save_panel_open():
+    return re.search(r'^AXButton: ' + re.escape(system_label('Save')) + r'( \||$)', str(listing()), re.M) is not None
+
+
+def save_folder_is_current():
+    return any(str(line).startswith('AXPopUpButton:') and state.name in str(line) for line in listing().splitlines()) and system_label('Go to Folder') not in listing()
+
+
+def review_move(number, side, san):
+    return raw(f'{number}, {display(side)}, {san}')
+
+
+def progress_visible():
+    expected = str(display('Lesson %lld of %lld, clip %lld of %lld',1,1,'CLIPNUMBER',18))
+    return re.search(re.escape(expected).replace('CLIPNUMBER',r'[0-9]+'),str(listing())) is not None
+
+
+def cleanup_finished():
+    shown = listing()
+    if 'No outdated translations or recordings to remove.' in shown:
+        return True
+    expected = str(display('Removed %lld outdated files (%@).','FILECOUNT','BYTES'))
+    pattern = re.escape(expected).replace('FILECOUNT',r'[0-9]+').replace('BYTES',r'.+')
+    return re.search(pattern,str(shown)) is not None
+
+
+def collection_panel_open():
+    return any(str(row).startswith('AXWindow: ') and 'open-panel' in str(row).split(' | ') for row in listing().splitlines())
 
 
 def confirm_panel(press, still_open, done, message):
@@ -127,9 +188,9 @@ try:
     # Lesson drawer controls take the same path.
     pointer("click", sidebar_lessons.row("The Pawn"))
     wait(lambda: "In this lesson" in listing(), "The lesson did not open")
-    before = pointer("value", "In this lesson")
+    before = str(pointer("value", "In this lesson"))
     pointer("click", "In this lesson")
-    wait(lambda: pointer("value", "In this lesson") != before, "The lesson disclosure did not respond to a click")
+    wait(lambda: str(pointer("value", "In this lesson")) != before, "The lesson disclosure did not respond to a click")
 
     # About Checkmate is the standard About panel; the About pane, with its links, opens in Settings.
     # Automation records each open request instead of launching a browser or Finder.
@@ -145,16 +206,25 @@ try:
     pointer("click", "Sound")
     wait(lambda: "Piece and move sounds" in listing(), "The Sound settings row did not respond to a click")
     pointer("click", "Voice Coach")
-    wait(lambda: "Thinking" in listing(), "Voice Coach thinking settings did not appear")
-    for title, effort in [("Balanced", "low"), ("Thorough", "high"), ("Quick", "minimal")]:
-        pointer("select-popup", "coach-thinking", title)
-        wait(lambda: json.loads((state / "state-v1.json").read_text())["settings"]["coachReasoningEffort"] == effort, "Thinking level did not persist: " + effort)
-    pointer("click", "coach-advanced")
-    wait(lambda: "Reasoning effort" in listing(), "Advanced did not show the reasoning effort")
-    for title, effort in [("Balanced", "low"), ("Medium", "medium"), ("Thorough", "high"), ("Extra high", "xhigh"), ("Quick", "minimal")]:
-        pointer("select-popup", "coach-reasoning-effort", title)
-        wait(lambda: json.loads((state / "state-v1.json").read_text())["settings"]["coachReasoningEffort"] == effort, "Reasoning effort did not persist: " + effort)
-    subprocess.run(["screencapture", "-x", str(evidence / "voice-reasoning-settings.png")], check=True)
+    if legacy_voice_fixture:
+        wait(lambda: "Thinking" in listing(), "Voice Coach thinking settings did not appear")
+        for title, effort in [("Balanced", "low"), ("Thorough", "high"), ("Quick", "minimal")]:
+            pointer("select-popup", "coach-thinking", title)
+            wait(lambda: json.loads((state / "state-v1.json").read_text())["settings"]["coachReasoningEffort"] == effort, "Thinking level did not persist: " + effort)
+        pointer("click", "coach-advanced")
+        wait(lambda: "Reasoning effort" in listing(), "Advanced did not show the reasoning effort")
+        for title, effort in [("Balanced", "low"), ("Medium", "medium"), ("Thorough", "high"), ("Extra high", "xhigh"), ("Quick", "minimal")]:
+            pointer("select-popup", "coach-reasoning-effort", title)
+            wait(lambda: json.loads((state / "state-v1.json").read_text())["settings"]["coachReasoningEffort"] == effort, "Reasoning effort did not persist: " + effort)
+        subprocess.run(["screencapture", "-x", str(evidence / "voice-reasoning-settings.png")], check=True)
+    else:
+        wait(lambda: raw("DeepSeek · deepseek-flash") in listing(), "The default DeepSeek settings did not appear")
+        before = json.loads((state / "state-v1.json").read_text())["settings"]["deepSeekSpeak"]
+        pointer("click", "deepseek-speak-answers")
+        wait(lambda: json.loads((state / "state-v1.json").read_text())["settings"]["deepSeekSpeak"] != before, "Read-aloud preference did not persist")
+        assert json.loads((state / "state-v1.json").read_text())["settings"]["coachProvider"] == "deepseek"
+        assert not json.loads((state / "state-v1.json").read_text())["settings"]["deepSeekConsent"]
+        subprocess.run(["screencapture", "-x", str(evidence / "deepseek-settings.png")], check=True)
     pointer("click", "Lessons")
     wait(lambda: "Recording voice" in listing(), "The Lessons settings row did not respond to a click")
     wait(lambda: "Translate" in listing(), "Lesson translation controls are missing")
@@ -162,55 +232,55 @@ try:
     if fixture:
         pointer("select-popup", "lesson-language", "French")
         pointer("click", "Translate")
-        wait(lambda: "French lesson:" in listing(), "Fixture translation did not populate text inspection")
-        wait(lambda: "Completed. Matching" in listing(), "Fixture translation did not finish")
+        wait(lambda: raw("French lesson:") in listing(), "Fixture translation did not populate text inspection")
+        wait(lambda: "Completed. Matching translated text and verified clips are reused when resuming." in listing(), "Fixture translation did not finish")
         pointer("click", "Generate Preview")
-        wait(lambda: "Preview ready." in listing(), "Fixture preview generation did not finish")
+        wait(lambda: "Preview ready. Choose Play Preview to listen." in listing(), "Fixture preview generation did not finish")
         pointer("click", "Record / Resume")
-        wait(lambda: re.search(r"Lesson 1 of 1, clip [0-9]+ of 18", listing()) is not None, "Fixture recording progress is missing")
+        wait(lambda: progress_visible(), "Fixture recording progress is missing")
         # Control for the cleanup check below: a running lesson job's Cancel accepts clicks.
         assert pointer("enabled", "lesson-job-cancel") == "true", "Cancel was disabled during a cancellable recording"
         pointer("click", "lesson-job-cancel")
-        wait(lambda: "Canceled. Completed text and clips" in listing(), "Fixture recording cancellation failed")
+        wait(lambda: "Canceled. Completed text and clips are preserved." in listing(), "Fixture recording cancellation failed")
         subprocess.run(["screencapture", "-x", str(evidence / "lesson-settings.png")], check=True)
-        wait(lambda: "Incomplete lessons use English." in listing(), "Cancelled partial recording did not report English fallback")
+        wait(lambda: "Translated text can be read before recordings are complete. Without a complete recording set, translated lessons play silently." in listing(), "Cancelled partial recording did not report English fallback")
         pointer("click", "Record / Resume")
-        wait(lambda: "Complete offline lesson: 18 verified recordings." in listing(), "Fixture resumed recording did not complete", timeout=30)
+        wait(lambda: display("Complete offline lesson: %lld verified recordings.",18) in listing(), "Fixture resumed recording did not complete", timeout=30)
         # Destructive confirmations: Cancel (and Return, the default) close them without acting.
         pointer("click", "Remove Clip")
         wait(lambda: "Remove clip 1?" in listing(), "Clip removal confirmation did not open")
         dialog("Remove clip 1?", "Cancel")
         wait(lambda: "Remove clip 1?" not in listing(), "Cancel did not close the clip removal confirmation")
         time.sleep(0.5)
-        assert "Clip 1 removed." not in listing() and "Complete offline lesson: 18 verified recordings." in listing(), "Cancel removed the clip"
+        assert display("Clip %lld removed. Record / Resume records it again; until then its translated text remains available without narration.",1) not in listing() and display("Complete offline lesson: %lld verified recordings.",18) in listing(), "Cancel removed the clip"
         pointer("click", "Remove Clip")
         wait(lambda: "Remove clip 1?" in listing(), "Clip removal confirmation did not reopen")
         pointer("return")
         wait(lambda: "Remove clip 1?" not in listing(), "Return did not close the clip removal confirmation")
         time.sleep(0.5)
-        assert "Clip 1 removed." not in listing() and "Complete offline lesson: 18 verified recordings." in listing(), "Return (the default button) removed the clip"
+        assert display("Clip %lld removed. Record / Resume records it again; until then its translated text remains available without narration.",1) not in listing() and display("Complete offline lesson: %lld verified recordings.",18) in listing(), "Return (the default button) removed the clip"
         pointer("click", "Remove Clip")
         wait(lambda: "Remove clip 1?" in listing(), "Clip removal confirmation did not open")
         dialog("Remove clip 1?", "Remove")
-        wait(lambda: "Clip 1 removed." in listing(), "Confirmed clip removal failed")
-        wait(lambda: "17 of 18 recordings stored" in listing(), "Removing one clip did not keep the other 17")
+        wait(lambda: display("Clip %lld removed. Record / Resume records it again; until then its translated text remains available without narration.",1) in listing(), "Confirmed clip removal failed")
+        wait(lambda: display("Translated text stored; %lld of %lld recordings stored. Translated text can be read while recordings are incomplete.",17,18) in listing(), "Removing one clip did not keep the other 17")
         pointer("click", "Record / Resume")
-        wait(lambda: "Complete offline lesson: 18 verified recordings." in listing(), "Re-recording the removed clip did not complete", timeout=30)
+        wait(lambda: display("Complete offline lesson: %lld verified recordings.",18) in listing(), "Re-recording the removed clip did not complete", timeout=30)
         pointer("close-window", "Settings")
-        pointer("click", "French lesson: Introduction")
-        wait(lambda: "French lesson:" in listing() and "In this lesson" in listing(), "Offline translated lesson did not open")
-        assert "This lesson is playing in English because" not in listing(), "Complete recording unexpectedly fell back to English"
+        pointer("click", raw("French lesson: Introduction"))
+        wait(lambda: raw("French lesson:") in listing() and "In this lesson" in listing(), "Offline translated lesson did not open")
+        assert "This lesson is playing in English because its selected language recording is incomplete or unavailable." not in listing(), "Complete recording unexpectedly fell back to English"
         subprocess.run(["screencapture", "-x", str(evidence / "offline-lesson.png")], check=True)
         pointer("menu", "Checkmate", "Settings…")
         wait(lambda: "Remove Stored Lesson" in listing(), "Lessons settings did not reopen")
         pointer("click", "Remove Stored Lesson")
         wait(lambda: "Remove stored lesson language?" in listing(), "Recording removal confirmation did not open")
         dialog("Remove stored lesson language?", "Remove")
-        wait(lambda: "Recordings removed." in listing(), "Confirmed recording removal failed")
-        wait(lambda: "French lesson:" in listing(), "Recording removal discarded translated inspection text")
+        wait(lambda: "Recordings removed. Translated text and lesson progress are preserved." in listing(), "Confirmed recording removal failed")
+        wait(lambda: raw("French lesson:") in listing(), "Recording removal discarded translated inspection text")
         pointer("close-window", "Settings")
         pointer("click", sidebar_lessons.row("Introduction"))
-        wait(lambda: "This lesson is playing in English because" in listing(), "Removed recording did not fall back to English")
+        wait(lambda: "Translated text is available. Narration is silent until all recordings for this lesson are ready." in listing(), "Removed recording did not keep translated text with silent narration")
         subprocess.run(["screencapture", "-x", str(evidence / "fallback-lesson.png")], check=True)
         pointer("menu", "Checkmate", "Settings…")
         wait(lambda: "Recording voice" in listing(), "Lessons settings did not reopen after fallback")
@@ -220,31 +290,31 @@ try:
         dialog("Discard translated text?", "Cancel")
         wait(lambda: "Discard translated text?" not in listing(), "Cancel did not close the discard confirmation")
         time.sleep(0.5)
-        assert "Translation and recordings discarded." not in listing() and "French lesson:" in listing(), "Cancel discarded the translated text"
+        assert "Custom translation and recordings discarded. Any built-in translation is available again." not in listing() and raw("French lesson:") in listing(), "Cancel discarded the translated text"
         pointer("click", "Discard Translated Text…")
         wait(lambda: "Discard translated text?" in listing(), "Discard confirmation did not reopen")
         dialog("Discard translated text?", "Discard")
-        wait(lambda: "Translation and recordings discarded." in listing(), "Confirmed discard did not report its result")
+        wait(lambda: "Custom translation and recordings discarded. Any built-in translation is available again." in listing(), "Confirmed discard did not report its result")
         # Outdated-translation cleanup: Cancel does nothing; once confirmed it runs to completion and cannot be cancelled.
         pointer("click", "Remove Outdated Translations…")
         wait(lambda: "Remove outdated translations?" in listing(), "Cleanup confirmation did not open")
         dialog("Remove outdated translations?", "Cancel")
         wait(lambda: "Remove outdated translations?" not in listing(), "Cancel did not close the cleanup confirmation")
         time.sleep(0.5)
-        assert "Removing outdated translations" not in listing() and "outdated translations or recordings to remove" not in listing(), "Cancel started the cleanup"
+        assert "Removing outdated translations…" not in listing() and "No outdated translations or recordings to remove." not in listing(), "Cancel started the cleanup"
         pointer("click", "Remove Outdated Translations…")
         wait(lambda: "Remove outdated translations?" in listing(), "Cleanup confirmation did not reopen")
         dialog("Remove outdated translations?", "Remove")
-        wait(lambda: "Removing outdated translations" in listing(), "Confirmed cleanup did not start")
+        wait(lambda: "Removing outdated translations…" in listing(), "Confirmed cleanup did not start")
         assert pointer("enabled", "lesson-job-cancel") == "false", "Cancel was enabled while cleanup ran"
-        wait(lambda: re.search(r"No outdated translations or recordings to remove\.|Removed [0-9]+ outdated file", listing()) is not None, "Cleanup did not report its result")
+        wait(lambda: cleanup_finished(), "Cleanup did not report its result")
     pointer("click", "Usage")
     wait(lambda: "Checkmate activity" in listing(), "The Usage settings row did not respond to a click")
     pointer("select-popup", "usage-time-range", "All retained")
     wait(lambda: pointer("value", "usage-time-range") == "All retained", "The usage range did not respond to a click")
     # The activity rows always render; only their values show whether the range holds recorded operations.
     if fixture:
-        wait(lambda: re.search(r"[1-9][0-9,]* tokens", listing()) is not None, "The usage range did not show the fixture's recorded tokens")
+        wait(lambda: re.search(re.escape(str(display("%lld tokens","TOKENCOUNT"))).replace("TOKENCOUNT",r"[1-9][0-9,]*"),str(listing())) is not None, "The usage range did not show the fixture's recorded tokens")
     else:
         wait(lambda: "No recorded Checkmate activity in this time range." in listing(), "An empty usage range did not say so")
     pointer("click", "Clear History…")
@@ -253,15 +323,15 @@ try:
     wait(lambda: "Clear usage history?" not in listing(), "Clear history cancellation failed")
     if fixture:
         pointer("click", "Refresh Account Status")
-        wait(lambda: "Automation fixture account status" in listing(), "Explicit fixture account refresh failed")
+        wait(lambda: raw("Automation fixture account status") in listing(), "Explicit fixture account refresh failed")
     pointer("click", "Export JSON…")
     # The closed menu bar always lists File ▸ Save Review, so wait for the panel's own Save button.
-    wait(lambda: re.search(r"^AXButton: Save( \||$)", listing(), re.M) is not None, "Usage export save panel did not open")
+    wait(lambda: save_panel_open(), "Usage export save panel did not open")
     pointer("go-folder", str(state))
     # The Go to Folder sheet closes with an animation; a click on Save during it is dropped by the panel.
-    wait(lambda: re.search(r"^AXPopUpButton: Where: \| " + re.escape(state.name), listing(), re.M) is not None and "Go to Folder" not in listing(), "The save panel did not move to the export folder")
+    wait(lambda: save_folder_is_current(), "The save panel did not move to the export folder")
     exported = state / "Checkmate-usage.json"
-    confirm_panel(lambda: pointer("click", "Save"), lambda: re.search(r"^AXButton: Save( \||$)", listing(), re.M) is not None,
+    confirm_panel(lambda: pointer("click", system_label("Save")), lambda: save_panel_open(),
                   exported.exists, "Usage JSON export was not written")
     exported_usage = json.loads(exported.read_text())
     assert "records" in exported_usage, "Usage export has no record array"
@@ -291,16 +361,16 @@ try:
     # Without captures, a game's only listed moment is its final move: Nc6 for alpha, dxc4 and e3 for bravo.
     # A load takes well under this; any review opened by the cancelled chooser would be listed by now.
     time.sleep(3)
-    assert "2, Black, dxc4" not in listing() and "2, Black, Nc6" not in listing(), "Cancel still opened a file"
+    assert review_move(2,"Black","dxc4") not in listing() and review_move(2,"Black","Nc6") not in listing(), "Cancel still opened a file"
     running = subprocess.run(["pgrep", "-f", str(app_bundle / "Contents/MacOS/CheckmateNative")], capture_output=True, text=True).stdout.split()
     assert running == [str(process.pid)], f"Opening files started another app instance: {running}"
     open_files()
     wait(lambda: "Choose a file to review" in listing(), "The file chooser did not reopen")
-    pointer("select-popup", "File to review", "bravo.pgn")
-    wait(lambda: pointer("value", "File to review") == "bravo.pgn", "The file chooser did not take the pointer's choice")
+    pointer("select-popup", "File to review", raw("bravo.pgn"))
+    wait(lambda: pointer("value", "File to review") == raw("bravo.pgn"), "The file chooser did not take the pointer's choice")
     dialog("Choose a file to review", "Review")
-    wait(lambda: "2, Black, dxc4" in listing(), "The chosen file did not open for review")
-    assert "2, Black, Nc6" not in listing(), "The chooser opened the file it was not given"
+    wait(lambda: review_move(2,"Black","dxc4") in listing(), "The chosen file did not open for review")
+    assert review_move(2,"Black","Nc6") not in listing(), "The chooser opened the file it was not given"
 
     # Quitting with a review that cannot be saved asks first; Cancel keeps the app and the review.
     pointer("menu", "File", "Save Review")
@@ -320,17 +390,19 @@ try:
         path.chmod(0o400)
     (state / "Reviews").chmod(0o500)
     try:
-        pointer("click", "2, Black, dxc4")
+        pointer("click", review_move(2,"Black","dxc4"))
         # Quit only once the review shows the new position: a quit queued before the click is applied has nothing unsaved.
         wait(lambda: pointer("label", "c4").startswith("c4, Black, pawn"), "Clicking dxc4 did not move the review there")
         pointer("menu", "Checkmate", "Quit Checkmate")
-        wait(lambda: process.poll() is not None or "A review could not be saved." in listing(), "Quitting with an unsaved review did not ask")
+        wait(lambda: process.poll() is not None or "AXButton: Quit Anyway" in listing(), "Quitting with an unsaved review did not ask")
         assert process.poll() is None, "Quitting with an unsaved review did not ask: the app quit"
         dialog("A review could not be saved.", "Cancel")
-        wait(lambda: "A review could not be saved." not in listing(), "Cancel did not close the quit alert")
+        # The Chinese title is also a prefix of the persistent storage banner.
+        # The alert's action must disappear; the underlying save error may remain.
+        wait(lambda: "AXButton: Quit Anyway" not in listing(), "Cancel did not close the quit alert")
         time.sleep(1)
         assert process.poll() is None, "Cancel on the unsaved-reviews alert quit the app"
-        assert "2, Black, dxc4" in listing(), "Cancel on the unsaved-reviews alert closed the review"
+        assert review_move(2,"Black","dxc4") in listing(), "Cancel on the unsaved-reviews alert closed the review"
     finally:
         (state / "Reviews").chmod(0o700)
         for path in locked:
@@ -360,7 +432,7 @@ try:
 
     def choose_scope(title):
         """The scope control is a segmented control, or a pop-up menu when the window is narrow; either is clicked."""
-        if re.search(r"^AXPopUpButton: Show", listing(), re.M):
+        if re.search(r"^AXPopUpButton: "+re.escape(str(display("Show"))), str(listing()), re.M):
             pointer("select-popup", "library-scope", title)
             wait(lambda: pointer("value", "library-scope") == title, "The scope menu did not take " + title)
         else:
@@ -375,14 +447,14 @@ try:
         wait(lambda: "library-search" in listing(), "The workspace did not show the game library")
         show_classics()
         pointer("click", row)
-        wait(lambda: "AXButton: Save Review" in listing() and "11, White, Qxh7+" in listing(), "Clicking a library row did not open a draft review")
+        wait(lambda: "AXButton: Save Review" in listing() and review_move(11,"White","Qxh7+") in listing(), "Clicking a library row did not open a draft review")
 
     def back_to_game(where):
         pointer("click", "Return to Game")
         wait(lambda: "practice-heading" in listing(), "Return to game did not leave " + where)
 
     open_library_game()
-    pointer("click", "11, White, Qxh7+")
+    pointer("click", review_move(11,"White","Qxh7+"))
     wait(lambda: label("h7").startswith("h7, White, queen"), "Clicking a move-table cell did not show that position")
     # Opening a review analyzes the whole game by itself ("Analyze When Opened", on by default).
     wait(lambda: "review-evaluation-graph" in listing(), "Opening the review did not analyze the game and draw the evaluation graph", timeout=300)
@@ -392,11 +464,15 @@ try:
     def graph_position():
         # The graph's label names the selected move ("Evaluation graph, 12… Nf6, +0.4, mistake"); the game starts with
         # White, so "Start" is ply 0, "N." ply 2N-1 and "N…" ply 2N.
-        match = re.search(r"Evaluation graph, (?:(Start)|(\d+)(\.|…) )", listing())
+        pattern = re.escape(str(display('Evaluation graph, %@','POSITION'))).replace('POSITION',r'(?:('+re.escape(str(display('Start')))+r')|(\d+)(\.|…) )')
+        match = re.search(pattern, str(listing()))
         if not match:
             return None
         return 0 if match[1] else 2 * int(match[2]) - (1 if match[3] == "." else 0)
 
+    # Restored window positions can leave the graph's right edge offscreen.
+    # Physical drag events need the whole target on the display, unlike AX presses.
+    prepare_window()
     for fraction, expected in [(0.005, 0), (0.995, plies), (17.25 / plies, 17)]:
         pointer("click-at", graph, f"{fraction:.4f}")
         wait(lambda: graph_position() == expected, f"A click at {fraction:.3f} of the graph did not select ply {expected}: {graph_position()}")
@@ -443,7 +519,7 @@ try:
     wait(lambda: row in listing() and "library-row-library:immortal" not in listing(), "⌘F did not focus the library search")
     pointer("key", "125")
     pointer("return")
-    wait(lambda: "AXButton: Save Review" in listing() and "11, White, Qxh7+" in listing(), "↓ and Return from the search did not open the game")
+    wait(lambda: "AXButton: Save Review" in listing() and review_move(11,"White","Qxh7+") in listing(), "↓ and Return from the search did not open the game")
     back_to_game("a game opened from the keyboard")
     collections = state / "Library"
 
@@ -463,39 +539,39 @@ try:
     pointer("escape")
     wait(lambda: pointer("value", "library-search") == "", "Escape did not clear the kept search")
     pointer("click", "Import Collection…")
-    wait(lambda: re.search(r"^AXButton: Import( \||$)", listing(), re.M) is not None, "Import Collection… did not open the open panel")
+    wait(lambda: re.search(r"^AXButton: "+re.escape(str(display("Import")))+r"( \||$)", str(listing()), re.M) is not None, "Import Collection… did not open the open panel")
     pointer("go-folder", str(state / "club.pgn"))
-    wait(lambda: "Go to Folder" not in listing(), "The open panel did not go to the collection")
+    wait(lambda: system_label("Go to Folder") not in listing(), "The open panel did not go to the collection")
     # Return presses the panel's default button, Import (its contents are another process's view, which accessibility
     # searches can wait on indefinitely).
-    confirm_panel(lambda: pointer("return"), lambda: "AXWindow: Open | open-panel" in listing(), lambda: len(stored()) == 1,
+    confirm_panel(lambda: pointer("return"), collection_panel_open, lambda: len(stored()) == 1,
                   "Importing through the open panel stored no collection")
     choose_scope("My games")
-    wait(lambda: "Ada Example – Ben Sample" in listing() and "Ben Sample – Cleo Test" in listing(), "My games did not list the imported collection")
+    wait(lambda: raw("Ada Example – Ben Sample") in listing() and raw("Ben Sample – Cleo Test") in listing(), "My games did not list the imported collection")
     # A real file drop on the library list imports it as a collection.
     assert pointer("drop-file", str(state / "dropped.pgn"), "library-list") == "copy", "The library list refused the dropped file"
-    wait(lambda: len(stored()) == 2 and "Dee Drop – Eve Target" in listing(), "A file dropped on the library did not import as a collection")
+    wait(lambda: len(stored()) == 2 and raw("Dee Drop – Eve Target") in listing(), "A file dropped on the library did not import as a collection")
     # The same kind of drop on the practice board keeps today's behaviour: it opens the file for review, no collection.
     back_to_game("the library")
-    assert pointer("drop-file", str(state / "board.pgn"), "Chessboard") == "copy", "The board refused the dropped file"
-    wait(lambda: "AXButton: Save Review" in listing() and "2, White, Nc3" in listing(), "A file dropped on the board did not open for review")
+    assert pointer("drop-file", str(state / "board.pgn"), raw("board-square-d4")) == "copy", "The board refused the dropped file"
+    wait(lambda: "AXButton: Save Review" in listing() and review_move(2,"White","Nc3") in listing(), "A file dropped on the board did not open for review")
     assert len(stored()) == 2, "A file dropped on the board was added to the library"
     back_to_game("the dropped review")
     # Remove a collection: the confirmation's Cancel keeps it, Remove deletes its file and index.
     pointer("click", "Review game")
     wait(lambda: "library-search" in listing(), "The workspace did not show the game library")
     choose_scope("My games")
-    wait(lambda: "Dee Drop – Eve Target" in listing(), "My games did not list the dropped collection")
+    wait(lambda: raw("Dee Drop – Eve Target") in listing(), "My games did not list the dropped collection")
     dropped_sha = hashlib.sha256(imports["dropped.pgn"].encode()).hexdigest()
     pointer("click", "library-remove-" + dropped_sha[:12])
-    wait(lambda: "Remove “dropped.pgn”?" in listing(), "Remove… did not ask for confirmation")
-    dialog("Remove “dropped.pgn”?", "Cancel")
-    wait(lambda: "Remove “dropped.pgn”?" not in listing(), "Cancel did not close the confirmation")
+    wait(lambda: display("Remove “%@”?","dropped.pgn") in listing(), "Remove… did not ask for confirmation")
+    dialog(display("Remove “%@”?","dropped.pgn"), "Cancel")
+    wait(lambda: display("Remove “%@”?","dropped.pgn") not in listing(), "Cancel did not close the confirmation")
     assert len(stored()) == 2, "Cancel removed the collection"
     pointer("click", "library-remove-" + dropped_sha[:12])
-    wait(lambda: "Remove “dropped.pgn”?" in listing(), "Remove… did not ask again")
-    dialog("Remove “dropped.pgn”?", "Remove")
-    wait(lambda: len(stored()) == 1 and "Dee Drop – Eve Target" not in listing(), "Remove did not delete the collection")
+    wait(lambda: display("Remove “%@”?","dropped.pgn") in listing(), "Remove… did not ask again")
+    dialog(display("Remove “%@”?","dropped.pgn"), "Remove")
+    wait(lambda: len(stored()) == 1 and raw("Dee Drop – Eve Target") not in listing(), "Remove did not delete the collection")
     assert not (collections / (dropped_sha + ".index.json")).exists(), "Remove left the collection's index"
     assert not (state / "Reviews").exists() or all("Dee Drop" not in path.read_text() for path in (state / "Reviews").glob("*.json")), "A collection became a saved review"
     back_to_game("the library")
@@ -513,7 +589,8 @@ try:
         assert process.poll() is not None, "Quit did not end the app " + when
 
     def launch(folder, *flags):
-        return app_driver.launch([command[0], "--automation", "--data-dir", str(folder), *flags], environment)
+        legacy_flags = ["--legacy-voice-fixture"] if legacy_voice_fixture else []
+        return app_driver.launch([command[0], "--automation", "--data-dir", str(folder), *legacy_flags, *flags], environment)
 
     # The first-run welcome (L-20) with the real pointer, each answer in a new data folder of its own: Continue, Back,
     # the voice coach's setup with its consent declined, a placement and Start Lesson; then Skip. Answering saves at
@@ -533,19 +610,29 @@ try:
             pointer("click", "onboarding-back")
             wait(lambda: "onboarding-voice-language" in listing() and "onboarding-placement" not in listing(), "Back did not return to language and voice")
             pointer("click", "onboarding-voice-setup")
-            wait(lambda: "voice-consent-cancel" in listing(), "Set Up the Voice Coach… did not ask for consent first")
-            pointer("click", "voice-consent-cancel")
-            wait(lambda: "voice-consent-cancel" not in listing() and "onboarding-voice-setup" in listing(), "Declining consent did not leave the voice coach unset in the welcome")
+            if legacy_voice_fixture:
+                wait(lambda: "voice-consent-cancel" in listing(), "Set Up the Voice Coach… did not ask for consent first")
+                pointer("click", "voice-consent-cancel")
+                wait(lambda: "voice-consent-cancel" not in listing() and "onboarding-voice-setup" in listing(), "Declining consent did not leave the voice coach unset in the welcome")
+            else:
+                # DeepSeek setup checks local configuration; consent belongs to
+                # actually sending a question or starting Chinese input.
+                time.sleep(.3)
+                assert "voice-consent-cancel" not in listing() and "onboarding-voice-setup" in listing(), 'DeepSeek local setup left the welcome or started legacy voice'
             pointer("click", "onboarding-continue")
             wait(lambda: "onboarding-placement" in listing(), "Continue did not reach where to start again")
             pointer("click", "I know how the pieces move")
             pointer("click", "onboarding-continue")
             # The first move's page, not the placement's, names the lesson the chosen placement opens.
             wait(lambda: "onboarding-start" in listing(), "Continue did not reach the first move")
-            wait(lambda: "Your first lesson: " + placed in listing(), "Choosing a placement did not name its first lesson")
+            first_lesson=display("Your first lesson: %@",expected_text(expected_course(placed)))
+            wait(lambda: first_lesson in listing(), "Choosing a placement did not name its first lesson")
             pointer("click", "onboarding-start")
         wait(lambda: "onboarding-continue" not in listing() and "onboarding-start" not in listing() and "onboarding-skip" not in listing(), "The welcome's " + answer + " did not close it")
         wait(lambda: any(folder.glob("state-*")), "The welcome's " + answer + " was not saved at once")
+        if not legacy_voice_fixture:
+            settings = app_driver.saved(folder)['settings']
+            assert settings['coachProvider']=='deepseek' and not settings.get('deepSeekConsent',False) and not settings.get('voiceConsent',False), 'Welcome setup connected or authorized a provider without asking'
         quit_app("after the welcome's " + answer)
 
     # Today's Mix and Review Due (L-29) with the real pointer, in the skipped welcome's folder. A new learner's mix
@@ -558,7 +645,7 @@ try:
     def puzzle_open(prompt):
         def check():
             shown = listing()
-            return prompt in shown and "puzzle-hint" in shown and "puzzle-today-mix" not in shown
+            return expected_content(prompt) in shown and "puzzle-hint" in shown and "puzzle-today-mix" not in shown
         return check
 
     def show_puzzle(prompt, message):

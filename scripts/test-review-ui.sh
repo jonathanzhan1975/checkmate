@@ -12,11 +12,29 @@ CHECKMATE_BUNDLE_ID=ai.xiaolai.checkmate.native-review-automation CHECKMATE_APP_
 xcrun swiftc Tools/ReviewScenario.swift -o "$checkmate_review_evidence/review-scenario-helper"
 "$checkmate_review_evidence/review-scenario-helper" "$checkmate_review_evidence" > "$checkmate_review_evidence/helper.log" 2>&1 &
 checkmate_helper_pid=$!
-# This interaction scenario asserts English fixture labels. Keep its language
-# deterministic on Chinese test hosts; Chinese narration/text has separate tests.
-CHECKMATE_AUTOMATION=1 build/CheckmateReviewAutomation.app/Contents/MacOS/CheckmateNative --automation -AppleLanguages '(en)' -AppleLocale en_US --data-dir "$checkmate_review_data" --review-scenario "$checkmate_review_evidence" > "$checkmate_review_evidence/app.log" 2>&1 &
+# Chinese is the primary UI; explicit silent DeepSeek fixtures never call a model service.
+export CHECKMATE_TEST_LANGUAGE=${CHECKMATE_TEST_LANGUAGE:-zh-Hans}
+CHECKMATE_AUTOMATION=1 CHECKMATE_DEEPSEEK_FIXTURE=1 DEEPSEEK_API_KEY=sk-checkmate-fixture-only build/CheckmateReviewAutomation.app/Contents/MacOS/CheckmateNative --automation -AppleLanguages "($CHECKMATE_TEST_LANGUAGE)" -AppleLocale zh_CN --data-dir "$checkmate_review_data" --review-scenario "$checkmate_review_evidence" > "$checkmate_review_evidence/app.log" 2>&1 &
 checkmate_review_pid=$!
-trap 'kill "$checkmate_review_pid" "$checkmate_helper_pid" 2>/dev/null || true;wait "$checkmate_review_pid" "$checkmate_helper_pid" 2>/dev/null || true;rm -rf "$checkmate_review_data"' EXIT
+checkmate_language_pid=""
+trap 'kill "$checkmate_review_pid" "$checkmate_helper_pid" ${checkmate_language_pid:+"$checkmate_language_pid"} 2>/dev/null || true;wait "$checkmate_review_pid" "$checkmate_helper_pid" ${checkmate_language_pid:+"$checkmate_language_pid"} 2>/dev/null || true;rm -rf "$checkmate_review_data"' EXIT
+python3 - "$checkmate_review_pid" "$checkmate_review_evidence" <<'PYLANG' &
+import pathlib,sys,time,subprocess
+sys.path.insert(0,'scripts')
+import app_driver,ui_locale
+pid=int(sys.argv[1]);evidence=pathlib.Path(sys.argv[2])
+ui_locale.expect_instance(evidence,pid)
+helper=app_driver.compile_helpers(evidence,{'ax-helper':'review-language-helper'})['ax-helper']
+for attempt in range(100):
+    try:
+        app_driver.helper_output(helper,pid,'list')
+        ui_locale.verify_evidence(evidence)
+        break
+    except (ui_locale.LanguageEvidenceMissing,subprocess.CalledProcessError):
+        if attempt==99:raise
+        time.sleep(.2)
+PYLANG
+checkmate_language_pid=$!
 for ((i=0;i<900;i++)); do
   [[ -f "$checkmate_review_evidence/review-ui-results.json" ]] && break
   # Both processes may finish between the check above and these: look for the results once more before failing.
@@ -25,6 +43,7 @@ for ((i=0;i<900;i++)); do
   sleep 1
 done
 [[ -f "$checkmate_review_evidence/review-ui-results.json" ]] || { echo 'Review scenario timed out' >&2; exit 1; }
+wait "$checkmate_language_pid"
 # The helper verifies that the scenario's normal termination persisted the latest cursor and ideas.
 wait "$checkmate_helper_pid" || { echo 'Review scenario helper failed:' >&2; cat "$checkmate_review_evidence/helper.log" >&2; exit 1; }
 python3 - "$checkmate_review_evidence" <<'PY'

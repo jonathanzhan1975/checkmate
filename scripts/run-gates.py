@@ -418,7 +418,9 @@ def run(names: list, full: bool = False) -> int:
               'Set CHECKMATE_EVIDENCE_DIR to another folder.', file=sys.stderr)
         return 2
     evidence.mkdir(parents=True, exist_ok=True)
-    environment = {**os.environ, 'CHECKMATE_EVIDENCE_DIR': str(evidence)}
+    language_run_id = os.urandom(16).hex()
+    (evidence / 'language-run.json').write_text(json.dumps({'runID': language_run_id}))
+    environment = {**os.environ, 'CHECKMATE_EVIDENCE_DIR': str(evidence), 'CHECKMATE_LANGUAGE_RUN_ID': language_run_id}
     # Inputs and gate definitions are fixed before anything is built: a source, gate command or check edited during the
     # build or any gate fails the gate, so a pass never certifies sources or checks newer than what actually ran.
     # The definitions fingerprint the checks this process loaded; each gate's end compares them with the disk.
@@ -463,7 +465,7 @@ def run(names: list, full: bool = False) -> int:
             # Each gate gets its own TMPDIR: whatever it leaves there is a leak, reported instead of piling up in /tmp.
             scratch = pathlib.Path(tempfile.mkdtemp(prefix=f'checkmate-gate-{name}.'))
             try:
-                returncode = run_gate_process('set -euo pipefail; ' + gate['run'], {**environment, 'TMPDIR': str(scratch) + '/'})
+                returncode = run_gate_process('set -euo pipefail; ' + gate['run'], {**environment, 'CHECKMATE_LANGUAGE_GATE': name, 'TMPDIR': str(scratch) + '/'})
                 seconds = time.monotonic() - started
                 windows.append((name, began, time.time()))
                 leftovers = temporary_leftovers(scratch)

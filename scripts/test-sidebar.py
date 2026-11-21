@@ -10,6 +10,9 @@ import uuid
 
 import app_driver
 import test_host
+from ui_locale import raw
+DELETE_CANCEL = raw("review-delete-cancel")
+DELETE_CONFIRM = raw("review-delete-confirm")
 test_host.require("native sidebar acceptance")
 root = pathlib.Path(__file__).resolve().parents[1]
 evidence = pathlib.Path(os.environ["CHECKMATE_EVIDENCE_DIR"])
@@ -27,12 +30,12 @@ process = None
 
 
 def act(action, target=""):
-    return subprocess.check_output([str(helper), str(process.pid), action, target], text=True)
+    return app_driver.helper_output(helper, process.pid, action, target)
 
 
 def key(action, *arguments):
     """Real key events, as a person presses them; accessibility press would bypass the alert's key handling."""
-    return subprocess.check_output([str(pointer_helper), str(process.pid), action, *arguments], text=True)
+    return app_driver.helper_output(pointer_helper, process.pid, action, *arguments)
 
 
 def wait(predicate):
@@ -67,7 +70,8 @@ try:
     (evidence / "sidebar-initial-ax.txt").write_text(listing)
     assert "Review game" in listing
     assert "Saved reviews" not in listing
-    assert "awaiting novice acceptance" not in listing
+    # A removed development placeholder has no catalog entry; keep its exact absence check.
+    assert raw("awaiting novice acceptance") not in listing
 
     def review_files():
         records = {}
@@ -121,15 +125,15 @@ try:
     before = review_files()
     act("press", "review-document-actions")
     act("press", "Delete Saved Review…")
-    wait(lambda: "review-delete-cancel" in act("list"))
-    act("press", "review-delete-cancel")
+    wait(lambda: DELETE_CANCEL in act("list"))
+    act("press", DELETE_CANCEL)
     assert review_files().keys() == before.keys()
     assert "Return to Game" in act("list")
-    wait(lambda: "review-delete-cancel" not in act("list"))
+    wait(lambda: DELETE_CANCEL not in act("list"))
     act("press", "review-document-actions")
     act("press", "Delete Saved Review…")
-    wait(lambda: "review-delete-confirm" in act("list"))
-    act("press", "review-delete-confirm")
+    wait(lambda: DELETE_CONFIRM in act("list"))
+    act("press", DELETE_CONFIRM)
     wait(lambda: "practice-heading" in act("list"))
     wait(lambda: len(review_files()) == len(before) - 1)
     removed = set(before) - set(review_files())
@@ -157,14 +161,14 @@ try:
     for answer in ("escape", "return"):
         act("press", "review-document-actions")
         act("press", "Delete Saved Review…")
-        wait(lambda: "review-delete-confirm" in act("list"))
+        wait(lambda: DELETE_CONFIRM in act("list"))
         key(answer)
-        wait(lambda: "review-delete-confirm" not in act("list"))
+        wait(lambda: DELETE_CONFIRM not in act("list"))
         assert review_files() == kept, f"{answer} on the delete confirmation deleted the review"
     act("press", "review-document-actions")
     act("press", "Delete Saved Review…")
-    wait(lambda: "review-delete-confirm" in act("list"))
-    act("press", "review-delete-confirm")
+    wait(lambda: DELETE_CONFIRM in act("list"))
+    act("press", DELETE_CONFIRM)
     wait(lambda: len(review_files()) == len(kept) - 1)
     key("shortcut", "6", "c")
     wait(lambda: review_files().keys() == kept.keys())

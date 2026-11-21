@@ -29,6 +29,9 @@ import CheckmateCore
             window.offerNetworkCrashReview()
             // Scenario flags mutate and save the game: only an isolated automation run may use them, never the released app.
             let automation=Self.isolatedAutomation
+            // Original provider-specific UI contracts run only with an explicit
+            // isolated, silent fixture. Normal builds retain the DeepSeek default.
+            if automation,CommandLine.arguments.contains("--legacy-voice-fixture"){var settings=model.session.state.settings;settings.coachProvider="openai";model.session.updateSettings(settings)}
             // The welcome is for a true first run; automation and tests see it only when they ask for it (L-20).
             if Onboarding.shows(firstRun:firstRun,silent:NativePolicy.silent,requested:automation && CommandLine.arguments.contains("--onboarding")){window.showOnboarding()}
             // A gate may run one instance dark beside light ones (network-ui) without touching the system appearance.
@@ -91,8 +94,23 @@ import CheckmateCore
             // Out-of-process accessibility checks by Tools/ReviewScenario.swift: what is rendered, not model state.
             var axSequence=0,axLog:[[String:Any]]=[]
             @MainActor func ax(_ name:String,_ checks:[[String:Any]])async -> [[String:Any]] {
+                var localized:[[String:Any]]=[]
+                for var check in checks {
+                    if check["raw"] as? Bool != true {
+                        func expected(_ text:String)->String {
+                            let translated=Bundle.checkmate.localizedString(forKey:text,value:text,table:nil)
+                            if Bundle.checkmate.preferredLocalizations.first?.hasPrefix("zh")==true,translated==text,text.range(of:"[A-Za-z]",options:.regularExpression) != nil,text.range(of:"[\\p{Han}]",options:.regularExpression)==nil {
+                                failures.append("Untranslated UI expectation: \(text)")
+                            }
+                            return translated
+                        }
+                        for key in ["value","title"]{if let text=check[key] as? String{check[key]=expected(text)}}
+                        if let values=check["values"] as? [String]{check["values"]=values.map(expected)}
+                    }
+                    localized.append(check)
+                }
                 axSequence+=1;let request=URL(fileURLWithPath:directory+"/ax-request-\(axSequence).json"),response=URL(fileURLWithPath:directory+"/ax-result-\(axSequence).json")
-                try? FileManager.default.removeItem(at:response);try? JSONSerialization.data(withJSONObject:["pid":ProcessInfo.processInfo.processIdentifier,"name":name,"checks":checks]).write(to:request,options:.atomic)
+                try? FileManager.default.removeItem(at:response);try? JSONSerialization.data(withJSONObject:["pid":ProcessInfo.processInfo.processIdentifier,"name":name,"checks":localized]).write(to:request,options:.atomic)
                 for _ in 0..<400 {if let data=try? Data(contentsOf:response),let object=try? JSONSerialization.jsonObject(with:data) as? [String:Any],let results=object["results"] as? [[String:Any]]{axLog.append(["name":name,"results":results]);return results};try? await Task.sleep(for:.milliseconds(100))}
                 axLog.append(["name":name,"results":"no helper response"]);return []
             }
@@ -103,7 +121,8 @@ import CheckmateCore
             let beforeInvalid=model.review.document?.contentHash;clipboard.clearContents();clipboard.setString("1. e9 *",forType:.string);pasteReview();await settleImport()
             if model.review.document?.contentHash != beforeInvalid || model.storageError==nil{failures.append("Invalid paste replaced current review")}
             let invalidMessage=model.storageError ?? ""
-            let readableError=invalidMessage.hasPrefix("Record 1, token") && invalidMessage.contains("e9") && !invalidMessage.contains("ReviewImportError")
+            let errorPrefix=NSRegularExpression.escapedPattern(for:String(localized:"Record \(1), token \(817): \("")",bundle:.checkmate)).replacingOccurrences(of:"817",with:"[0-9]+")
+            let readableError=invalidMessage.range(of:"^"+errorPrefix,options:.regularExpression) != nil && invalidMessage.contains("e9") && !invalidMessage.contains("ReviewImportError")
             if !readableError{failures.append("Import error is not a located readable message: \(invalidMessage)")}
             try? await Task.sleep(for:.milliseconds(400));try? await game.capture(directory+"/error-banner.png")
             let errorAX=await ax("rendered-import-error",[["kind":"text","value":invalidMessage],["kind":"press","title":"Dismiss"]])
@@ -218,7 +237,7 @@ import CheckmateCore
             model.dismissStorageError();try model.session.restorePrevious();model.session.cancelWork();model.session.state=savedState;model.session.emit(save:true)
             if model.session.state.practice.pgn != failPGN{failures.append("Scenario could not restore the practice game after the replacement check")}
             if leftWasOpen{game.toggleLeft()};if rightWasOpen{game.toggleRight()};try? await Task.sleep(for:.milliseconds(900))
-            let failedRestorePassed=blackToMove && quietAtFailure && stillQuiet && callbacksHeld && quietAfterDismiss && failureMessage.contains("Resume Game") && axPassed(restoreAX,0) && axPassed(restoreAX,1) && axPassed(restoreAX,2) && (0..<3).allSatisfy{axPassed(detailsAX,$0)} && drawersClosed && quietBeforeResume && axPassed(resumeAX,0) && axPassed(resumeAX,1) && resumedByExplicitAction && resumeCleared && replacementCleared && model.storageError==nil && game.errorBanner?.isHidden==true && model.session.mode == .practice && model.session.state.practice.pgn==failPGN
+            let failedRestorePassed=blackToMove && quietAtFailure && stillQuiet && callbacksHeld && quietAfterDismiss && failureMessage.contains(String(localized:"Resume Game",bundle:.checkmate)) && axPassed(restoreAX,0) && axPassed(restoreAX,1) && axPassed(restoreAX,2) && (0..<3).allSatisfy{axPassed(detailsAX,$0)} && drawersClosed && quietBeforeResume && axPassed(resumeAX,0) && axPassed(resumeAX,1) && resumedByExplicitAction && resumeCleared && replacementCleared && model.storageError==nil && game.errorBanner?.isHidden==true && model.session.mode == .practice && model.session.state.practice.pgn==failPGN
             if !failedRestorePassed{failures.append("Failed saved-review restore started the opponent or lacked a rendered explicit resume (blackToMove=\(blackToMove) quiet=\(quietAtFailure) stillQuiet=\(stillQuiet) callbacksHeld=\(callbacksHeld) afterDismiss=\(quietAfterDismiss) drawersClosed=\(drawersClosed) resumed=\(resumedByExplicitAction) cleared=\(resumeCleared) replacement=\(replacementCleared) message=\(failureMessage))")}
             let docs=try PGNImporter.parse(Data("[Event \"Automation record\"]\n1. d4 d5 (1... Nf6) 2. c4 e6 *".utf8));model.openReview(docs[0]);try await Task.sleep(for:.milliseconds(850));game.refresh();let originalHash=model.review.document!.contentHash,boardWidth=game.board.boardRect.width
             let noReplyDuringReview = !model.session.busy && model.session.rules.history.count==1
@@ -241,7 +260,7 @@ import CheckmateCore
             if !game.board.moveAnimationActive{failures.append("Normal motion override did not start animation")};game.board.cancelAnimation()
             game.board.automationReduceMotion=nil;game.board.selected=nil;game.board.updateBreathing();game.refresh()
             let accessibleSquares=game.board.accessibilityChildren()?.compactMap{$0 as? SquareAccessibility} ?? []
-            if accessibleSquares.count != 64 || game.board.accessibilityLabel() != "Chessboard"{failures.append("Board accessibility tree incomplete")}
+            if accessibleSquares.count != 64 || game.board.accessibilityLabel() != String(localized:"Chessboard",bundle:.checkmate){failures.append("Board accessibility tree incomplete")}
             game.window?.makeFirstResponder(game.board)
             @MainActor func key(_ code:UInt16,_ modifiers:NSEvent.ModifierFlags=[]){NSApp.sendEvent(NSEvent.keyboardKey(code,modifiers,windowNumber:game.window!.windowNumber))}
             model.session.setVoiceFocus(["h4"],identity:model.session.displayIdentity);game.refresh();if !game.board.highlights.contains(where:{$0.sq=="h4" && $0.kind=="focus"}){failures.append("Verified review speech focus was not rendered")};model.session.setVoiceFocus([],identity:model.session.displayIdentity)
@@ -265,23 +284,70 @@ import CheckmateCore
             field.removeFromSuperview();try model.review.select(0);game.refresh();game.window!.makeFirstResponder(game.board)
             let goKeysStayInTextField=goKeyChecks.count==12 && goKeyChecks.values.allSatisfy{$0};if !goKeysStayInTextField{failures.append("Go keys with a text field focused: \(goKeyChecks.filter{!$0.value}.keys.sorted())")}
             game.newGame();game.undo();game.restorePrevious();let menuGuardPassed=model.session.rules.fen==practice;if !menuGuardPassed{failures.append("Game menu action mutated hidden practice during review")}
-            // Review voice status and newest-first transcript are rendered in the review drawer (no network, no audio).
-            game.showDetails();model.voice.receive(["type":"session.updated"])
-            model.voice.receive(["type":"response.output_audio_transcript.done","response_id":"review-older","transcript":"Older review explanation."])
-            model.voice.receive(["type":"response.output_audio_transcript.done","response_id":"review-newer","transcript":"Newest review explanation."])
-            model.voice.receive(["type":"response.done","response":["status":"failed"]])
-            let voiceStatus=model.voice.status;try? await Task.sleep(for:.milliseconds(900));try? await game.capture(directory+"/review-voice.png")
-            let voiceAX=await ax("review-voice",[["kind":"text","value":voiceStatus],["kind":"text","value":"Newest review explanation."],["kind":"text","value":"Older review explanation."],["kind":"textOrder","values":["Newest review explanation.","Older review explanation."]]])
-            let reviewVoicePassed=voiceStatus=="The coach could not complete this response." && (0..<4).allSatisfy{axPassed(voiceAX,$0)} && model.voice.history.last?.context=="Review · starting position" && !model.session.voiceHold
-            if !reviewVoicePassed{failures.append("Review voice status/newest-first transcript not rendered")}
-            // A failed turn keeps the session; this simulated one ends here so the rest of the review runs without voice.
-            model.voice.disconnect()
+            // Default DeepSeek: actual Chinese card, scoped requests, newest-first answers, failure/retry and stop.
+            guard let fixture=model.deepSeekAutomation else{throw CheckmateError.invalid("Missing isolated DeepSeek fixture")}
+            game.showDetails();game.refresh();try await Task.sleep(for:.milliseconds(500))
+            @MainActor func askReview(_ question:String)async -> Bool {
+                model.voiceHelp.draft=question;try? await Task.sleep(for:.milliseconds(200))
+                let sent=await ax("deepseek-send",[["kind":"pressIdentifier","identifier":"deepseek-send"]])
+                if !model.session.state.settings.deepSeekConsent {
+                    let consent=await ax("deepseek-consent",[["kind":"pressIdentifier","identifier":"deepseek-consent-agree"]])
+                    if !axPassed(consent,0){return false}
+                }
+                for _ in 0..<150 where model.deepSeekCoach.thinking{try? await Task.sleep(for:.milliseconds(30))}
+                return axPassed(sent,0)
+            }
+            guard let reviewFEN=model.review.displayFEN else{throw CheckmateError.invalid("Review board unavailable")}
+            func requestUsesReview(_ request:[String:Any])->Bool {
+                guard let messages=request["messages"] as? [[String:Any]],let content=messages.last?["content"] as? String,
+                      let json=content.components(separatedBy:"本轮已验证棋局数据：\n").last,
+                      let object=try? JSONSerialization.jsonObject(with:Data(json.utf8)) as? [String:Any] else{return false}
+                return object["scope"] as? String=="read-only-review" && object["fen"] as? String==reviewFEN && object["nodeId"] as? Int==0
+            }
+            try fixture.recorder.setPlan(text:"较早的中文复盘解释。")
+            let olderSent=await askReview("请解释当前复盘局面。")
+            try fixture.recorder.setPlan(text:"最新的中文复盘解释。")
+            let newerSent=await askReview("请补充当前复盘建议。")
+            let voiceAX=await ax("review-deepseek",[["kind":"text","value":"最新的中文复盘解释。"],["kind":"text","value":"较早的中文复盘解释。"],["kind":"textOrder","values":["最新的中文复盘解释。","较早的中文复盘解释。"]]])
+            let scoped=fixture.recorder.requests.count==2 && fixture.recorder.requests.allSatisfy(requestUsesReview) && model.deepSeekCoach.history.last?.source == .review
+            try fixture.recorder.setPlan(text:"",failure:"受控复盘请求失败，请重试。")
+            let failureSent=await askReview("请再次解释复盘。")
+            let failedAX=await ax("review-deepseek-failure",[["kind":"text","value":"受控复盘请求失败，请重试。"]])
+            try fixture.recorder.setPlan(text:"重试后的中文复盘回答。")
+            let retryAX=await ax("review-deepseek-retry",[["kind":"pressIdentifier","identifier":"deepseek-retry"]])
+            for _ in 0..<150 where model.deepSeekCoach.thinking{try await Task.sleep(for:.milliseconds(30))}
+            let retryRendered=await ax("review-deepseek-retried",[["kind":"text","value":"重试后的中文复盘回答。"]])
+            try fixture.recorder.setPlan(text:"停止后的迟到回答不得显示。",delayMilliseconds:8000)
+            let beforeStopRequest=fixture.recorder.requests.count
+            model.voiceHelp.draft="这次请求会被停止。";try await Task.sleep(for:.milliseconds(200))
+            let pendingAX=await ax("review-deepseek-pending",[["kind":"pressIdentifier","identifier":"deepseek-send"]])
+            for _ in 0..<100 where fixture.recorder.requests.count==beforeStopRequest{try await Task.sleep(for:.milliseconds(20))}
+            let stopWasInFlight=fixture.recorder.requests.count==beforeStopRequest+1 && model.deepSeekCoach.thinking && requestUsesReview(fixture.recorder.requests.last ?? [:])
+            let stopAX=await ax("review-deepseek-stop",[["kind":"pressIdentifier","identifier":"deepseek-stop"]])
+            try await Task.sleep(for:.milliseconds(1700))
+            let stopCancelled=fixture.recorder.responses.contains{($0["id"] as? Int)==beforeStopRequest+1 && $0["status"] as? String=="cancelled"}
+            let stopped = stopCancelled && !model.deepSeekCoach.thinking && !model.deepSeekCoach.history.contains{$0.text=="停止后的迟到回答不得显示。"}
+            try fixture.recorder.setPlan(text:"旧复盘节点的迟到回答不得显示。",delayMilliseconds:8000)
+            let beforeSwitchRequest=fixture.recorder.requests.count
+            model.voiceHelp.draft="这次请求将切换节点。";try await Task.sleep(for:.milliseconds(200))
+            let switchAX=await ax("review-deepseek-before-navigation",[["kind":"pressIdentifier","identifier":"deepseek-send"]])
+            for _ in 0..<100 where fixture.recorder.requests.count==beforeSwitchRequest{try await Task.sleep(for:.milliseconds(20))}
+            let switchWasInFlight=fixture.recorder.requests.count==beforeSwitchRequest+1 && model.deepSeekCoach.thinking && requestUsesReview(fixture.recorder.requests.last ?? [:])
+            try model.review.select(docs[0].mainline[0]);game.refresh();try await Task.sleep(for:.milliseconds(1700))
+            let switchCancelled=fixture.recorder.responses.contains{($0["id"] as? Int)==beforeSwitchRequest+1 && $0["status"] as? String=="cancelled"}
+            let staleRejected = switchCancelled && !model.deepSeekCoach.thinking && !model.deepSeekCoach.history.contains{$0.text=="旧复盘节点的迟到回答不得显示。"}
+            try model.review.select(0);model.deepSeekCoach.stop();game.refresh()
+            let reviewDeepSeekChecks:[String:Bool]=["defaultProvider":model.usesDeepSeekCoach,"olderSent":olderSent,"newerSent":newerSent,"currentReviewContext":scoped,"chineseHistoryNewestFirst":(0..<3).allSatisfy{axPassed(voiceAX,$0)},"failureSent":failureSent,"failureRendered":axPassed(failedAX,0),"retryClicked":axPassed(retryAX,0),"retryAnswered":axPassed(retryRendered,0),"pendingClicked":axPassed(pendingAX,0),"stopClicked":axPassed(stopAX,0),"stopInFlight":stopWasInFlight,"stopped":stopped,"navigationClicked":axPassed(switchAX,0),"navigationInFlight":switchWasInFlight,"staleAnswerRejected":staleRejected,"voiceReleased":!model.session.voiceHold,"practicePreserved":model.session.rules.fen==practice]
+            let reviewVoicePassed=reviewDeepSeekChecks.values.allSatisfy{$0}
+            try fixture.recorder.writeSnapshot(to:URL(fileURLWithPath:directory+"/review-deepseek-receipt.json"))
+            if !reviewVoicePassed{failures.append("Chinese DeepSeek review question/context/history/failure/retry/stop/navigation check failed")}
+            try? await game.capture(directory+"/review-deepseek.png")
 
             try model.review.beginBranch();game.refresh()
             @MainActor func click(_ square:String)async {let rect=game.board.squareRect(square),point=game.board.convert(NSPoint(x:rect.midX,y:rect.midY),to:nil);await NSEvent.syntheticClick(at:point,in:game.window!)}
             await click("e2");await click("e4");let mouseBranchVerified=model.review.board["e4"]=="wp";if !mouseBranchVerified{failures.append("Actual mouse branch move failed")};try? await game.capture(directory+"/imagined-mouse.png");key(126,.option);key(126,.option);key(126,.option);key(49);key(125,.option);key(125,.option);key(49);let keyboardBranchVerified=model.review.board["e5"]=="bp" && model.review.branch?.moves.count==2;if !keyboardBranchVerified{failures.append("Actual keyboard imagined move failed")};try? await game.capture(directory+"/imagined-keyboard.png");game.showDetails();game.refresh();try? await Task.sleep(for:.milliseconds(700))
             // RV-2: the open idea lists its own moves, rendered and read from outside the app.
-            let ideaMovesAX=await ax("idea-moves",[["kind":"text","value":"Imagined move 1, e4"],["kind":"text","value":"Imagined move 2, e5"]]);let ideaMovesListed=axPassed(ideaMovesAX,0) && axPassed(ideaMovesAX,1);if !ideaMovesListed{failures.append("The open idea does not list its moves")}
+            let ideaMovesAX=await ax("idea-moves",[["kind":"text","value":String(localized:"Imagined move \(1), \("e4")",bundle:.checkmate)],["kind":"text","value":String(localized:"Imagined move \(2), \("e5")",bundle:.checkmate)]]);let ideaMovesListed=axPassed(ideaMovesAX,0) && axPassed(ideaMovesAX,1);if !ideaMovesListed{failures.append("The open idea does not list its moves")}
             model.review.clearBranch();if model.review.nodeID != 0 || model.review.document!.contentHash != originalHash{failures.append("Branch changed original cursor/hash")}
             if model.session.rules.fen != practice || model.session.state.practice.pgn != pgn{failures.append("Review modified suspended practice")}
             try model.review.select(docs[0].mainline.last!);model.saveReview();game.refresh();try? await Task.sleep(for:.milliseconds(200));try? await game.capture(directory+"/last-position.png")
@@ -322,11 +388,11 @@ import CheckmateCore
             model.automationReviewImportDelayMs=0
             model.openSavedReview(docs[0].id);for _ in 0..<40{if model.review.document?.id==docs[0].id{break};try await Task.sleep(for:.milliseconds(100))};try model.review.select(docs[0].mainline.last!);model.saveReview(immediate:true);game.refresh()
             if !game.desiredLeft{game.toggleLeft()};try? await Task.sleep(for:.milliseconds(900))
-            let selectionAX=await ax("saved-review-selected",[["kind":"selectedRow","value":"Automation record"]]);let savedRowSelected=axPassed(selectionAX,0)
+            let selectionAX=await ax("saved-review-selected",[["kind":"selectedRow","value":"Automation record","raw":true]]);let savedRowSelected=axPassed(selectionAX,0)
             if !savedRowSelected{failures.append("Open saved review is not selected in the sidebar")}
             game.window?.toggleFullScreen(nil);try await Task.sleep(for:.seconds(2));let entered=game.window!.styleMask.contains(.fullScreen);if !entered{failures.append("Review fullscreen failed")};try? await game.capture(directory+"/fullscreen-review.png");game.window?.toggleFullScreen(nil);try await Task.sleep(for:.seconds(2))
             model.session.cancelWork();model.returnToGame();model.session.cancelWork();if model.session.rules.fen != practice{failures.append("Return to game changed practice position")}
-            let preservedPractice=model.session.rules.fen==practice;try model.session.installPracticeFork(model.session.rules.copy(),side:"b");model.session.cancelWork();game.refresh();let blackPracticeTitle=game.titleView.label.stringValue;if !blackPracticeTitle.contains("Black vs"){failures.append("Black practice fork title states wrong human side")}
+            let preservedPractice=model.session.rules.fen==practice;try model.session.installPracticeFork(model.session.rules.copy(),side:"b");model.session.cancelWork();game.refresh();let blackPracticeTitle=game.titleView.label.stringValue;if !blackPracticeTitle.contains(String(localized:"Black vs Stockfish",bundle:.checkmate)){failures.append("Black practice fork title states wrong human side")}
             // "Compare Best Line · Before This Move" then the real confirmation sheet: the fork is the displayed
             // parent-rooted imagined position, at ply 0 and ply 1; checkmate positions keep Practise here disabled.
             let mateDocument=try PGNImporter.parse(Data("[Event \"Fork from parent\"]\n1. f3 e5 2. g4 Qh4# 0-1".utf8))[0],mateNode=mateDocument.mainline.last!,bestLine=["b8c6","b1c3","d8h4"]
@@ -430,7 +496,7 @@ import CheckmateCore
             let budgetsPassed=timedRows>=5165 && keystrokesShown && workspaceVisibleMs<300 && slowestKeystrokeMs<50
             if !budgetsPassed{failures.append("Library budgets missed (rows \(timedRows), rows shown \(keystrokesShown), workspace \(workspaceVisibleMs) ms, keystroke \(slowestKeystrokeMs) ms)")}
             try await Task.sleep(for:.milliseconds(600));await shoot("workspace")
-            let libraryAX=await ax("game-library-listed",[["kind":"text","value":"Game library"],["kind":"text","value":"Get More Games"],["kind":"text","value":"World Championship 2024 · Ding – Gukesh"]])
+            let libraryAX=await ax("game-library-listed",[["kind":"text","value":"Game library"],["kind":"text","value":"Get More Games"],["kind":"text","value":ChineseContent.text("World Championship 2024 · Ding – Gukesh")]])
             // Section headers are announced as headings, as SwiftUI's header trait made them.
             let eventHeading=libraryAX.indices.contains(2) && libraryAX[2]["role"] as? String=="AXHeading"
             if !eventHeading{failures.append("An event header is not a heading: \(libraryAX.indices.contains(2) ? libraryAX[2]:[:])")}
@@ -441,7 +507,7 @@ import CheckmateCore
             library.importCollection(collectionFile);for _ in 0..<100{if !library.catalog.collections.isEmpty{break};try await Task.sleep(for:.milliseconds(100))}
             let collectionImported=library.catalog.collections.first?.1.count==2
             library.scope = .myGames;try await Task.sleep(for:.milliseconds(400))
-            let collectionAX=await ax("collection-heading",[["kind":"text","value":"library-collection-fixture.pgn"]])
+            let collectionAX=await ax("collection-heading",[["kind":"text","value":"library-collection-fixture.pgn","raw":true]])
             let collectionHeading=collectionAX.first?["role"] as? String=="AXHeading"
             if !collectionHeading{failures.append("A collection header is not a heading: \(collectionAX)")}
             await shoot("library-my-games");library.scope = .all
@@ -523,7 +589,7 @@ import CheckmateCore
             model.returnToGame();model.session.cancelWork()
             let paneCapturesPassed=paneCaptures.count==16 && captureDefects.isEmpty && narrowed && axPassed(libraryAX,0) && axPassed(libraryAX,1) && collectionImported && graphReady
             if !paneCapturesPassed{failures.append("Review pane captures incomplete (captures=\(paneCaptures) defects=\(captureDefects) narrowed=\(narrowed) libraryListed=\(axPassed(libraryAX,0)) collectionImported=\(collectionImported) graphReady=\(graphReady))")}
-            let result:[String:Any]=["passed":failures.isEmpty,"reviewPaneCaptures":paneCapturesPassed,"goKeysStayInTextField":goKeysStayInTextField,"evaluationBarKeepsBoardSquare":evaluationBarKeepsBoardSquare,"retryWithPointer":retryWithPointer,"staleLibraryOpenDropped":staleLibraryOpenDropped,"newestLibraryOpenWins":newestOpenWins,"libraryHeadings":eventHeading && collectionHeading,"paneCaptureSizes":paneSizes,"libraryBudgets":["phases":phases,"tableCounts":tableCounts,"keystrokeMs":keystrokeMs,"rows":timedRows,"rowsShown":keystrokesShown,"workspaceVisibleMs":workspaceVisibleMs,"slowestKeystrokeMs":slowestKeystrokeMs,"passed":budgetsPassed],"renderedImportError":renderedErrorPassed,"readableImportError":readableError,"staleChooserRejected":staleChooserPassed,"explicitReturnResumesReply":resumedOnExplicitReturn,"failedRestoreNoReplyUntilExplicitReturn":failedRestorePassed,"failedRestoreCallbacksHeld":callbacksHeld,"failedRestoreResumeWithDrawersClosed":drawersClosed && axPassed(resumeAX,1) && resumedByExplicitAction,"failedRestoreReplacementCleared":replacementCleared,"ideaMovesListed":ideaMovesListed,"noReplyDuringReview":noReplyDuringReview,"reviewVoiceRendered":reviewVoicePassed,"savedReviewRowSelected":savedRowSelected,"practiceForkParentPly0":forkPly0Verified,"practiceForkParentPly1":forkPly1Verified,"practiceForkImaginedMateDisabled":terminalLineVerified,"accessibilityChecks":axLog,"failures":failures,"geometry":geometry,"openPanelAccepted":openPanelAccepted,"openPanelCancel":openPanelCancelled,"savedRestore":savedRestorePassed,"savedLoadLesson":savedLoadLessonPassed,"savedLoadImport":savedLoadImportPassed,"savedLoadLatest":savedLoadLatestPassed,"savedLoadSameID":savedLoadSameIDPassed,"savedLoadStaleError":savedLoadErrorPassed,"staleImportCancelled":staleImportPassed,"closeFlush":closeFlushPassed,"reviewDocumentFile":model.reviewStore.documentURL(docs[0].id).path,"expectedPersistedCursor":docs[0].mainline.last!,"expectedSavedIdeas":savedIdeas.count,"pasteEntry":pastePassed,"dropCallbackEntry":dropCallbackPassed,"collectionImport":collectionPassed,"appearances":appearances,"reducedMotionInjected":true,"defaultMotionMatchesWorkspace":defaultMotion,"accessibilitySquares":accessibleSquares.count,"mouseBranch":mouseBranchVerified,"keyboardBranch":keyboardBranchVerified,"keyboardNavigation":rightArrowVerified && leftArrowVerified,"typingFocusPreserved":typingPreserved,"hiddenPracticeMenuGuard":menuGuardPassed,"reviewAnnotationScoped":annotationRendered && annotationCleared,"fullscreenEntered":entered,"practicePreserved":preservedPractice,"blackPracticeTitle":blackPracticeTitle,"originalHashPreserved":originalHash==docs[0].contentHash,"silent":NativePolicy.silent]
+            let result:[String:Any]=["passed":failures.isEmpty,"deepSeekDefault":model.usesDeepSeekCoach && model.deepSeekAutomation != nil,"reviewPaneCaptures":paneCapturesPassed,"goKeysStayInTextField":goKeysStayInTextField,"evaluationBarKeepsBoardSquare":evaluationBarKeepsBoardSquare,"retryWithPointer":retryWithPointer,"staleLibraryOpenDropped":staleLibraryOpenDropped,"newestLibraryOpenWins":newestOpenWins,"libraryHeadings":eventHeading && collectionHeading,"paneCaptureSizes":paneSizes,"libraryBudgets":["phases":phases,"tableCounts":tableCounts,"keystrokeMs":keystrokeMs,"rows":timedRows,"rowsShown":keystrokesShown,"workspaceVisibleMs":workspaceVisibleMs,"slowestKeystrokeMs":slowestKeystrokeMs,"passed":budgetsPassed],"renderedImportError":renderedErrorPassed,"readableImportError":readableError,"staleChooserRejected":staleChooserPassed,"explicitReturnResumesReply":resumedOnExplicitReturn,"failedRestoreNoReplyUntilExplicitReturn":failedRestorePassed,"failedRestoreCallbacksHeld":callbacksHeld,"failedRestoreResumeWithDrawersClosed":drawersClosed && axPassed(resumeAX,1) && resumedByExplicitAction,"failedRestoreReplacementCleared":replacementCleared,"ideaMovesListed":ideaMovesListed,"noReplyDuringReview":noReplyDuringReview,"reviewVoiceRendered":reviewVoicePassed,"reviewDeepSeekChecks":reviewDeepSeekChecks,"savedReviewRowSelected":savedRowSelected,"practiceForkParentPly0":forkPly0Verified,"practiceForkParentPly1":forkPly1Verified,"practiceForkImaginedMateDisabled":terminalLineVerified,"accessibilityChecks":axLog,"failures":failures,"geometry":geometry,"openPanelAccepted":openPanelAccepted,"openPanelCancel":openPanelCancelled,"savedRestore":savedRestorePassed,"savedLoadLesson":savedLoadLessonPassed,"savedLoadImport":savedLoadImportPassed,"savedLoadLatest":savedLoadLatestPassed,"savedLoadSameID":savedLoadSameIDPassed,"savedLoadStaleError":savedLoadErrorPassed,"staleImportCancelled":staleImportPassed,"closeFlush":closeFlushPassed,"reviewDocumentFile":model.reviewStore.documentURL(docs[0].id).path,"expectedPersistedCursor":docs[0].mainline.last!,"expectedSavedIdeas":savedIdeas.count,"pasteEntry":pastePassed,"dropCallbackEntry":dropCallbackPassed,"collectionImport":collectionPassed,"appearances":appearances,"reducedMotionInjected":true,"defaultMotionMatchesWorkspace":defaultMotion,"accessibilitySquares":accessibleSquares.count,"mouseBranch":mouseBranchVerified,"keyboardBranch":keyboardBranchVerified,"keyboardNavigation":rightArrowVerified && leftArrowVerified,"typingFocusPreserved":typingPreserved,"hiddenPracticeMenuGuard":menuGuardPassed,"reviewAnnotationScoped":annotationRendered && annotationCleared,"fullscreenEntered":entered,"practicePreserved":preservedPractice,"blackPracticeTitle":blackPracticeTitle,"originalHashPreserved":originalHash==docs[0].contentHash,"silent":NativePolicy.silent]
             try JSONSerialization.data(withJSONObject:result,options:[.prettyPrinted,.sortedKeys]).write(to:URL(fileURLWithPath:directory+"/review-ui-results.json"));NSApp.terminate(nil)
         }catch{try? JSONSerialization.data(withJSONObject:["passed":false,"error":String(describing:error)]).write(to:URL(fileURLWithPath:directory+"/review-ui-results.json"));NSApp.terminate(nil)}
     }}
@@ -570,60 +636,61 @@ import CheckmateCore
                 } else {games.append(["id":kind.rawValue,"passed":false])}
             }
             // WI-018: a game won by a clicked move opens its review sheet with the proved fact; Return closes it, and a
-            // new game shows none. D5, with the voice double: Read Aloud, clicked with pointer events, opens a reading of
-            // that review alone, which asks only for the fact's exact text as a script; Return also ends the reading.
-            // The sheet's bottom row of buttons, leading first: SwiftUI hosts each as an AppKit control without a title
-            // or identifier, so the reading control (Read Aloud, then Stop Reading) is the one before Done. Each fact's
-            // Show on Board sits higher, in that fact's row.
-            @MainActor func buttons(_ root:NSView?)->[NSPoint] {
-                func find(_ view:NSView)->[NSView] {(view is NSControl && !view.isHidden ? [view]:[])+view.subviews.flatMap(find)}
-                let frames=(root.map(find) ?? []).map{$0.convert($0.bounds,to:nil)},bottom=frames.map(\.midY).min() ?? 0
-                return frames.filter{abs($0.midY-bottom)<4}.sorted{$0.minX<$1.minX}.map{NSPoint(x:$0.midX,y:$0.midY)}
+            // new game shows none. D5: Read Aloud, clicked with pointer events, reads this review alone through the
+            // silent local speech driver; Return also ends the reading, with no model or microphone calls.
+            // SwiftUI controls are not necessarily NSControl views. Locate stable AX identifiers out of
+            // process, then post actual pointer events while this actor continues servicing the window.
+            @MainActor func pressReading(_ identifier:String)async -> Bool {
+                guard let path=ProcessInfo.processInfo.environment["CHECKMATE_POINTER_HELPER"] else{return false}
+                let pid=ProcessInfo.processInfo.processIdentifier
+                return await Task.detached {
+                    let process=Process();process.executableURL=URL(fileURLWithPath:path)
+                    process.arguments=[String(pid),"click",identifier]
+                    do{try process.run();process.waitUntilExit();return process.terminationStatus==0}catch{return false}
+                }.value
             }
-            @MainActor func press(_ point:NSPoint,in sheet:NSWindow)async {
-                await NSEvent.syntheticClick(at:point,in:sheet)
-            }
-            final class Requests {var scripts:[String]=[],other=0}
             var reading:[String:Any]=["offered":false]
             seedAlmostWonRookSweep(model:model);game.refresh();try? await Task.sleep(for:.milliseconds(100))
             await click("a1");await click("a7")
             for _ in 0..<150 where !game.miniReviewSheetShown{try? await Task.sleep(for:.milliseconds(40))}
-            let sheetShown=game.miniReviewSheetShown,facts=model.learning.miniReview.review?.facts.map(\.text) ?? []
-            if let sheet=game.window?.attachedSheet {
+            let sheetShown=game.miniReviewSheetShown,proved=model.learning.miniReview.review?.facts ?? [],facts=proved.map(\.text)
+            let script=facts.prefix(3).joined(separator:"\n")
+            if let sheet=game.window?.attachedSheet,let fixture=model.deepSeekAutomation {
                 try? await GameWindow.captureWindow(sheet,path:directory+"/mini-review.png")
-                let requests=Requests()
-                model.voice.requestObserver={event in if let response=event["response"] as? [String:Any],response["conversation"] as? String=="none",let text=(response["instructions"] as? String)?.components(separatedBy:"SCRIPT:\n").last{requests.scripts.append(text)}else{requests.other+=1}}
-                let offered=buttons(sheet.contentView);reading["buttons"]=offered.count
-                if offered.count==2 {
-                    // A learner who already agreed to the voice coach; the consent question itself is VoiceConsentTests'.
-                    var agreed=model.session.state.settings;agreed.voiceConsent=true;model.session.updateSettings(agreed)
-                    await press(offered[0],in:sheet)
-                    for _ in 0..<75 where requests.scripts.isEmpty{try? await Task.sleep(for:.milliseconds(40))}
-                    try? await Task.sleep(for:.milliseconds(300))
-                    reading=["offered":true,"connected":model.voice.connected && model.voice.miniReviewSession != nil,"scripts":requests.scripts,"otherRequests":requests.other,"capturing":model.voice.audio.capturing]
-                    try? await GameWindow.captureWindow(sheet,path:directory+"/mini-review-reading.png")
-                    // Stop Reading, in Read Aloud's place, ends the reading; Read Aloud then starts it again.
-                    if let stop=buttons(sheet.contentView).first{await press(stop,in:sheet)}
-                    for _ in 0..<75 where model.voice.connected{try? await Task.sleep(for:.milliseconds(40))}
-                    reading["stopped"] = !model.voice.connected && model.voice.miniReviewSession==nil && model.session.voiceLease==nil
-                    try? await Task.sleep(for:.milliseconds(300))
-                    if let again=buttons(sheet.contentView).first{await press(again,in:sheet)}
-                    for _ in 0..<75 where !model.voice.connected{try? await Task.sleep(for:.milliseconds(40))}
-                    reading["readAgain"]=model.voice.connected && model.voice.miniReviewSession != nil && requests.scripts.count==2
-                }
-                model.voice.requestObserver=nil
+                let clicked=await pressReading("mini-review-read-aloud")
+                for _ in 0..<75 where !model.deepSeekCoach.speaking{try? await Task.sleep(for:.milliseconds(40))}
+                reading=["offered":clicked,"started":model.deepSeekCoach.speaking,"exactText":fixture.recorder.speechTexts==[script]]
+                try? await GameWindow.captureWindow(sheet,path:directory+"/mini-review-reading.png")
+                let stoppedClick=await pressReading("mini-review-stop")
+                for _ in 0..<75 where model.deepSeekCoach.speaking{try? await Task.sleep(for:.milliseconds(40))}
+                reading["stopped"] = stoppedClick && !model.deepSeekCoach.speaking && fixture.recorder.speechStops==1 && model.session.voiceLease==nil
+                try? await Task.sleep(for:.milliseconds(300))
+                let againClick=await pressReading("mini-review-read-aloud")
+                for _ in 0..<75 where !model.deepSeekCoach.speaking{try? await Task.sleep(for:.milliseconds(40))}
+                reading["readAgain"]=againClick && model.deepSeekCoach.speaking && fixture.recorder.speechTexts==[script,script]
                 for type in [NSEvent.EventType.keyDown,.keyUp] {if let event=NSEvent.keyEvent(with:type,location:.zero,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:sheet.windowNumber,context:nil,characters:"\r",charactersIgnoringModifiers:"\r",isARepeat:false,keyCode:36){NSApp.sendEvent(event)}}
             }
             for _ in 0..<75 where game.miniReviewSheetShown{try? await Task.sleep(for:.milliseconds(40))}
             let closed = !game.miniReviewSheetShown && !model.learning.miniReview.sheetOpen
-            for _ in 0..<75 where model.voice.connected{try? await Task.sleep(for:.milliseconds(40))}
-            reading["endedByReturn"] = !model.voice.connected && model.voice.miniReviewSession==nil && model.session.voiceLease==nil
+            for _ in 0..<75 where model.deepSeekCoach.speaking{try? await Task.sleep(for:.milliseconds(40))}
+            reading["endedByReturn"] = !model.deepSeekCoach.speaking && model.session.voiceLease==nil
+            // Restart while a second proved review is reading must also stop the local driver.
+            model.deepSeekCoach.readFacts(script)
+            let readingBeforeRestart=model.deepSeekCoach.speaking
             model.learning.restartMini();try? await Task.sleep(for:.milliseconds(300))
+            reading["endedByRestart"]=readingBeforeRestart && !model.deepSeekCoach.speaking
+            let recorder=model.deepSeekAutomation?.recorder
+            reading["noModelRequest"]=recorder?.requests.isEmpty==true
+            reading["noMicrophone"]=recorder?.microphoneStarts==0
+            try? recorder?.writeSnapshot(to:URL(fileURLWithPath:directory+"/mini-review-speech-receipt.json"))
             let review:[String:Any]=["sheetShown":sheetShown,"facts":facts,"closedByReturn":closed,"noneAfterRestart":!game.miniReviewSheetShown && model.learning.miniReview.status == .idle,"readAloud":reading]
-            let readAloud=reading["connected"] as? Bool==true && reading["scripts"] as? [String]==facts && reading["otherRequests"] as? Int==0 && reading["capturing"] as? Bool==false && reading["stopped"] as? Bool==true && reading["readAgain"] as? Bool==true && reading["endedByReturn"] as? Bool==true
-            let reviewed=sheetShown && facts==["Move 1: you could have won here in 1 move."] && closed && review["noneAfterRestart"] as? Bool==true && readAloud
+            let readAloud=["offered","started","exactText","stopped","readAgain","endedByReturn","endedByRestart","noModelRequest","noMicrophone"].allSatisfy{reading[$0] as? Bool==true}
+            let fact=proved.first
+            let expectedText=String(localized:"Move \(1): you could have won here in \(1) moves, whatever the computer did.",bundle:.checkmate)
+            let factCorrect=proved.count==1 && fact?.kind == .forcedWin && fact?.ply==0 && fact?.side=="w" && fact?.plies==1 && facts==[expectedText]
+            let reviewed=sheetShown && factCorrect && closed && review["noneAfterRestart"] as? Bool==true && readAloud
             let allPlayed=passed && games.count==MiniGameKind.allCases.count && games.allSatisfy{$0["passed"] as? Bool==true} && reviewed
-            try? JSONSerialization.data(withJSONObject:["passed":allPlayed,"games":games,"clicks":clicks,"board":board,"review":review],options:.prettyPrinted).write(to:URL(fileURLWithPath:directory+"/pawn-duel-results.json"))
+            try? JSONSerialization.data(withJSONObject:["passed":allPlayed,"deepSeekDefault":model.usesDeepSeekCoach && model.deepSeekAutomation != nil,"games":games,"clicks":clicks,"board":board,"review":review],options:.prettyPrinted).write(to:URL(fileURLWithPath:directory+"/pawn-duel-results.json"))
             NSApp.terminate(nil)
         }
     }

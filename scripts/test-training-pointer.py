@@ -17,6 +17,7 @@ from collections import deque
 
 import app_driver
 import test_host
+from ui_locale import raw, text, ui, language
 test_host.require("native pointer acceptance")
 root = pathlib.Path(__file__).resolve().parents[1]
 evidence = pathlib.Path(os.environ["CHECKMATE_EVIDENCE_DIR"])
@@ -30,6 +31,13 @@ environment["CHECKMATE_TRAINING_ENABLED"] = "1"
 process = None
 app = app_driver.App(helpers, lambda: process)
 pointer, listing, label, wait = app.pointer, app.listing, app.label, app_driver.wait
+
+
+def level_caption(key, level):
+    """Format a catalog UI caption with the displayed opponent level."""
+    catalog = json.loads((root / 'Sources/CheckmateCore/Localizable.xcstrings').read_text())['strings']
+    template = catalog[key]['localizations']['zh-Hans']['stringUnit']['value'] if language().startswith('zh') else key
+    return raw(template.replace('%@', text(ui(level))))
 
 
 def saved():
@@ -240,7 +248,9 @@ try:
     assert offered == ["beginner", "standard", "challenging"], f"Pawn Duel's calibrated levels changed to {offered}: update this gate"
     pointer("select-popup", "mini-difficulty", "Gentle")
     wait(lambda: "mini-new-level" in listing(), "Choosing a level during a game did not offer a new game at it")
-    assert "Start a New Game at Gentle" in listing() and "This game continues at Steady." in listing(), "The offer does not name the levels as shown"
+    new_game = level_caption("Start a New Game at %@", "Gentle")
+    continues = level_caption("This game continues at %@.", "Steady")
+    assert new_game in listing() and continues in listing(), "The offer does not name the levels as shown"
     wait(lambda: (saved().get("settings") or {}).get("miniOpponentProfiles", {}).get("pawn-duel") == "beginner", "The per-game level was not saved")
     assert (duel().get("level") or {}).get("profile") == "standard" and len(duel().get("history", [])) == 2, "The game in progress changed level"
     pointer("click", "mini-new-level")
@@ -265,8 +275,8 @@ try:
     legacy_from_library = True
 
     # The hinted mate is suggested for another try; following the suggestion replays that board as practice.
-    wait(lambda: "training-suggestion-mate-in-one" in listing(), "The hinted board was not suggested")
-    pointer("click", "training-suggestion-mate-in-one")
+    wait(lambda: raw("training-suggestion-mate-in-one") in listing(), "The hinted board was not suggested")
+    pointer("click", raw("training-suggestion-mate-in-one"))
     wait(lambda: active() is not None and active()["entry"] == "mate-in-one" and active().get("retry") is True, "The suggestion did not start its board as practice")
     pointer("click", "Training library")
     wait(lambda: "training-entry-reach-target" in listing(), "The transport did not return to the library")

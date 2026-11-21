@@ -175,7 +175,7 @@ func openPanelPhase(){
     // The panel may open in a remembered folder and view on a given machine, so choose the fixture as a person would:
     // Go to Folder with its path selects it in any view. A visible entry is clicked too, when the view shows one.
     let ax=isolatedApp(pid),name=URL(fileURLWithPath:path).lastPathComponent
-    guard find(ax,"Open",button:true) != nil else{failScenario("Open panel absent")}
+    guard find(ax,(ProcessInfo.processInfo.environment["CHECKMATE_TEST_LANGUAGE"] ?? "zh-Hans").hasPrefix("zh") ? "打开":"Open",button:true) != nil else{failScenario("Open panel absent")}
     key(5,flags:[.maskCommand,.maskShift]);usleep(300_000);type(path);key(36);usleep(400_000)
     let deadline=Date().addingTimeInterval(3)
     var found=find(ax,name,roles:fileEntryRoles);while found==nil,Date()<deadline{Thread.sleep(forTimeInterval:0.1);found=find(ax,name,roles:fileEntryRoles)}
@@ -185,7 +185,7 @@ func openPanelPhase(){
     var row=entry,ancestor:AXUIElement?=entry
     for _ in 0..<8 {guard let current=ancestor else{break};if value(current,kAXRoleAttribute) as? String==kAXRowRole{row=current;break};ancestor=value(current,kAXParentAttribute).map{$0 as! AXUIElement}}
     FileHandle.standardError.write(Data("Fixture entry role \(value(row,kAXRoleAttribute) ?? "" as CFString)\n".utf8))
-    guard let open=find(ax,"Open",button:true) else{failScenario("Open control absent")}
+    guard let open=find(ax,(ProcessInfo.processInfo.environment["CHECKMATE_TEST_LANGUAGE"] ?? "zh-Hans").hasPrefix("zh") ? "打开":"Open",button:true) else{failScenario("Open control absent")}
     // The Open panel is system UI, not the app under test: click it like a person when it reports frames, otherwise
     // select through accessibility, and say which path ran.
     let selectedByPath=value(open,kAXEnabledAttribute) as? Bool==true

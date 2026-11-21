@@ -42,4 +42,14 @@ final class ChineseContentTests: XCTestCase {
         XCTAssertEqual(ChineseContent.text("e2e4 Nf3 O-O",locale:"zh-Hans"),"e2e4 Nf3 O-O")
         XCTAssertEqual(ChineseContent.text("Learner supplied text",locale:"zh-Hans"),"Learner supplied text")
     }
+    func testRepeatedChinesePuzzleRowsStayResponsiveAndKeepNotation() {
+        let rows=(0..<82).map{"白方 · 第 \($0+1) 题 · Nf3 / e4 · Stockfish"}
+        _ = ChineseContent.text(rows[0],locale:"zh-Hans")
+        let began=Date()
+        for _ in 0..<25 {
+            for row in rows{XCTAssertEqual(ChineseContent.text(row,locale:"zh-Hans"),row)}
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(began),2,"Repeated translated list rows must not scan the entire phrase catalog on every redraw")
+        XCTAssertEqual(ChineseContent.text(rows[0],locale:"en"),rows[0])
+    }
 }

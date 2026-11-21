@@ -1,5 +1,9 @@
 # Checkmate
 
+> 本仓库当前开发版本为 **0.20.0 / build 34 中文 DeepSeek 预览版**，默认教练为 DeepSeek。
+> 开发进度、已完成验证和待验收范围见 [当前开发状态](docs/current-development-status.md)。
+> 下方英文说明保留上游产品背景；其中 Codex/OpenAI 教练及 Homebrew 安装说明不代表本中文预览版的默认配置或安装来源。
+
 Native macOS chess practice and learning, built with AppKit and SwiftUI.
 Offline Stockfish 19, 34 lessons with 5 practice activities, 82 puzzles and 710 Cedar recordings.
 Lesson mini-games include computer opponents. Game review supports finished and unfinished games, PGN files and FEN positions.

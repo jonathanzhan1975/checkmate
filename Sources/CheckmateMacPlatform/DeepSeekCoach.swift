@@ -20,7 +20,7 @@ import CheckmateAssets
     public let session:GameSession
     public var training:TrainingVoiceAdapter?,usageLedger:UsageLedger?
     private let client:any DeepSeekChatProviding,tools:CompanionTools
-    private let speech:ChineseCoachSpeech
+    private let speech:any ChineseCoachSpeechDriving
     private let turnTimeout:TimeInterval
     private var task:Task<Void,Never>?,deadline:Task<Void,Never>?,epoch=UUID(),lease:String?
     private var observation:AnyCancellable?,trainingObservation:AnyCancellable?,reviewObservation:AnyCancellable?
@@ -29,8 +29,8 @@ import CheckmateAssets
     private var readingPosition:String?,readingStarted:Date?,inputOperation:String?,inputStarted:Date?
     private var appliedSettings:AppSettings
     private var readingRequiresCoach=true
-    public init(session:GameSession,client:any DeepSeekChatProviding=DeepSeekChatClient(),timeout:TimeInterval=90)throws {
-        self.session=session;self.client=client;tools=try CompanionTools(session:session);speech=ChineseCoachSpeech();appliedSettings=session.state.settings
+    public init(session:GameSession,client:any DeepSeekChatProviding=DeepSeekChatClient(),timeout:TimeInterval=90,speech driver:(any ChineseCoachSpeechDriving)?=nil)throws {
+        self.session=session;self.client=client;tools=try CompanionTools(session:session);speech=driver ?? ChineseCoachSpeech();appliedSettings=session.state.settings
         turnTimeout=max(0.01,min(120,timeout))
         observation=session.objectWillChange.sink{[weak self] in DispatchQueue.main.async{self?.checkScope()}}
         speech.onTranscript={[weak self] text in guard let self else{return};finishInput(.completed);let identity=listeningScope;listeningScope=nil;guard identity==session.displayIdentity else{status=Self.changed;return};ask(text)}
@@ -136,9 +136,9 @@ import CheckmateAssets
                     guard !reply.text.isEmpty else{throw CheckmateError.invalid(String(localized:"DeepSeek returned an incomplete answer. Ask again.",bundle:.checkmate))}
                     if let trainingKey{_ = try training?.disclose([trainingKey]);try current()}
                     append("coach",reply.text);status=String(localized:"DeepSeek answered. You can ask a follow-up question.",bundle:.checkmate)
-                    if session.state.settings.deepSeekSpeak && !NativePolicy.silent {
+                    if session.state.settings.deepSeekSpeak {
                         readingRequiresCoach=true;readingIdentity=display;readingPosition=position;readingStarted=Date()
-                        readingOperation=usageLedger?.begin(activity:.voiceCoach,provider:"apple-speech-synthesis",sessionID:generation.uuidString,model:"AVSpeechSynthesizer",locale:"zh-CN")
+                        if !NativePolicy.silent{readingOperation=usageLedger?.begin(activity:.voiceCoach,provider:"apple-speech-synthesis",sessionID:generation.uuidString,model:"AVSpeechSynthesizer",locale:"zh-CN")}
                         speech.speak(reply.text,volume:Float(session.state.settings.voiceVolume))
                     }
                     return

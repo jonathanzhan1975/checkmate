@@ -7,6 +7,7 @@ staying exactly as it was throughout.
 """
 import json,os,pathlib,shutil,subprocess,tempfile,time
 import app_driver,sidebar_lessons,test_host;test_host.require('lesson exercise pointer acceptance')
+from ui_locale import raw, content
 root=pathlib.Path(__file__).resolve().parents[1];evidence=pathlib.Path(os.environ['CHECKMATE_EVIDENCE_DIR']);evidence.mkdir(parents=True,exist_ok=True)
 helpers=app_driver.compile_helpers(evidence,{'pointer-helper':'pointer-helper','ax-helper':'ax-helper'})
 state=pathlib.Path(tempfile.mkdtemp(prefix='checkmate-lesson-exercise-'));process=None
@@ -20,7 +21,7 @@ def wait(test,message,timeout=25):
  while time.monotonic()<end:
   try:
    if test():return
-  except subprocess.CalledProcessError:pass
+  except (subprocess.CalledProcessError,app_driver.ui_locale.LanguageEvidenceMissing):pass
   time.sleep(.2)
  raise AssertionError(message)
 def saved():return app_driver.saved(state)
@@ -83,7 +84,7 @@ try:
   pointer('click','bar-nextStep');wait(title('Castling · '),'Castling: Next did not return to the exercise step')
  results['playbackSlotsStayPut']=True
  # In a lesson the guidance is in the details drawer, whose toggle keeps its one name (the bar has no guidance button of its own).
- assert 'Details' in listing() and 'bar-' in listing() and 'Show lesson guidance' not in listing(),'The details toggle is missing in a lesson'
+ assert 'Details' in listing() and 'bar-' in listing() and raw('Show lesson guidance') not in listing() and '显示课程指导' not in listing(),'The details toggle is missing in a lesson'
  drawers(False,False)
  wait(title('Castling · Your turn'),'Castling: the title does not invite a move')
  play('e1g1')
@@ -99,7 +100,7 @@ try:
  # Castling Rules: the impossible side is explained and nothing moves; the legal side succeeds.
  exercise('Castling Rules','castling-rules')
  mistake=practice['castling-rules']['mistakes']['e1g1']
- play('e1g1');wait(lambda:mistake in listing(),'Castling Rules: the impossible castling was not explained')
+ play('e1g1');wait(lambda:content(mistake) in listing(),'Castling Rules: the impossible castling was not explained')
  assert label('e1').startswith('e1, White, king'),'Castling Rules: the king moved on an impossible castling'
  play('e1c1');wait(holds('c1','White, king'),'Castling Rules: queenside castling did not play');wait(holds('d1','White, rook'),'Castling Rules: the rook did not follow')
  wait(title('Castling Rules · Well done'),'Castling Rules: success not shown')

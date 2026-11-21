@@ -1,6 +1,7 @@
 """Silent test-host real-pointer checks for lesson activity handoffs, the way to a lesson exercise, and promotion."""
 import json,os,pathlib,re,shutil,subprocess,tempfile,time
 import app_driver,test_host;test_host.require('lesson pointer acceptance')
+from ui_locale import ui, text
 root=pathlib.Path(__file__).resolve().parents[1];evidence=pathlib.Path(os.environ['CHECKMATE_EVIDENCE_DIR']);evidence.mkdir(parents=True,exist_ok=True)
 helpers=app_driver.compile_helpers(evidence,{'pointer-helper':'pointer-helper','ax-helper':'ax-helper'})
 state=pathlib.Path(tempfile.mkdtemp(prefix='checkmate-lessons-pointer-'));process=None
@@ -25,8 +26,8 @@ try:
  app.open_drawers(wait,'Sidebar did not open','Details did not open')
  pointer('click-square','e2');pointer('click-square','e4')
  wait(lambda:'1. e4 ' in saved()['practice']['pgn'] and saved()['practice']['fen'].split()[1]=='w','Computer did not reply')
- click_lesson('Pawn Duel');wait(lambda:'Play Pawn Duel' in listing(),'Visible game invitation missing')
- pointer('click','Play Pawn Duel');wait(lambda:'Your turn' in listing(),'Play button did not start game')
+ click_lesson('Pawn Duel');wait(lambda:ui('Play Pawn Duel') in listing(),'Visible game invitation missing')
+ pointer('click',ui('Play Pawn Duel'));wait(lambda:'Your turn' in listing(),'Play button did not start game')
  wait(lambda:pointer('label','e2').startswith('e2, White, pawn'),'Mini-game board did not appear')
  time.sleep(.8)
  pointer('click-square','e2')
@@ -131,7 +132,7 @@ try:
  def steps_of(title):return course['stepTitles'][next(i for i,l in enumerate(course['lessons']) if l['title']==title)]
  def shown(title,k):return f'AXPopUpButton: Transcript | {k}. {steps_of(title)[k-1]}' in listing()
  def current():
-  found=re.search(r'AXPopUpButton: Transcript \| (\d+)\. ',listing());return int(found.group(1)) if found else 0
+  found=re.search(r'AXPopUpButton: '+re.escape(text(ui('Transcript')))+r' \| (\d+)\. ',listing());return int(found.group(1)) if found else 0
  def open_paused(title):
   click_lesson(title);wait(opened(title),f'{title} did not open')
   if 'AXPopUpButton: Transcript' not in listing():pointer('click','Details')

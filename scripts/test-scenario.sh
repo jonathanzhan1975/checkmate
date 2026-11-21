@@ -40,10 +40,28 @@ if [[ -n "${CHECKMATE_EXECUTION_ARCH:-}" ]]; then
     case "$CHECKMATE_EXECUTION_ARCH" in arm64|x86_64) ;; *) echo 'Invalid execution architecture' >&2;exit 1;; esac
     checkmate_launcher=(/usr/bin/arch "-$CHECKMATE_EXECUTION_ARCH")
 fi
-CHECKMATE_AUTOMATION=1 ${checkmate_launcher[@]+"${checkmate_launcher[@]}"} build/CheckmateAutomation.app/Contents/MacOS/CheckmateNative --automation -AppleLanguages "(${CHECKMATE_TEST_LANGUAGE:-en})" -AppleLocale en_US --data-dir "$checkmate_data" "$checkmate_flag" "$checkmate_evidence" ${@+"$@"} > "$checkmate_evidence/$checkmate_log" 2>&1 &
+CHECKMATE_AUTOMATION=1 ${checkmate_launcher[@]+"${checkmate_launcher[@]}"} build/CheckmateAutomation.app/Contents/MacOS/CheckmateNative --automation -AppleLanguages "(${CHECKMATE_TEST_LANGUAGE:-zh-Hans})" -AppleLocale zh_CN --data-dir "$checkmate_data" "$checkmate_flag" "$checkmate_evidence" ${@+"$@"} > "$checkmate_evidence/$checkmate_log" 2>&1 &
 checkmate_pid=$!
 # The app is stopped before its state is removed, so nothing writes into a folder being deleted.
 trap 'kill "$checkmate_pid" 2>/dev/null || true;wait "$checkmate_pid" 2>/dev/null || true;rm -rf "$checkmate_data"' EXIT
+# Observe the application's own localized menu, retaining the unmodified AX tree.
+# Launch arguments alone are not sufficient proof of a Chinese UI.
+python3 - "$checkmate_pid" "$checkmate_evidence" <<'PY'
+import pathlib,sys,time,subprocess
+sys.path.insert(0,'scripts')
+import app_driver,ui_locale
+pid=int(sys.argv[1]);evidence=pathlib.Path(sys.argv[2])
+ui_locale.expect_instance(evidence,pid)
+helper=app_driver.compile_helpers(evidence,{'ax-helper':'scenario-language-helper'})['ax-helper']
+for attempt in range(75):
+    try:
+        app_driver.helper_output(helper,pid,'list')
+        ui_locale.verify_evidence(evidence)
+        break
+    except (ui_locale.LanguageEvidenceMissing,subprocess.CalledProcessError):
+        if attempt==74:raise
+        time.sleep(.2)
+PY
 # Polled five times a second for the same deadline of <timeout-seconds>.
 for ((i=0;i<checkmate_timeout*5;i++)); do
     [[ -f "$checkmate_evidence/$checkmate_result" ]] && break

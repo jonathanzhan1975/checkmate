@@ -27,6 +27,27 @@
  ],
  "gates": [
   {
+   "name": "chinese",
+   "run": "python3 -I scripts/test-chinese-baseline.py",
+   "result": "chinese-results.json",
+   "key": "chineseRegression",
+   "inputs": [
+    "scripts/test-chinese-baseline.py",
+    "scripts/test-chinese-localization.py",
+    "Sources/CheckmateRules/*",
+    "Sources/CheckmateEngine/*",
+    "Sources/CheckmateCore/Resources/course.json",
+    "Sources/CheckmateCore/Resources/course.zh-Hans.json",
+    "Sources/CheckmateCore/Resources/content.zh-Hans.json",
+    "Sources/CheckmateCore/Resources/training/*",
+    "Sources/CheckmateCore/Resources/chess.js",
+    "Sources/CheckmateCore/Resources/relationships.js",
+    "Sources/CheckmateCore/Resources/stockfish",
+    "Sources/CheckmateCore/Resources/stockfish-build.json",
+    "Sources/CheckmateCore/Localizable.xcstrings"
+   ]
+  },
+  {
    "name": "architecture",
    "run": "python3 scripts/test-module-boundaries.py > \"$CHECKMATE_EVIDENCE_DIR/module-boundaries-results.json\"",
    "result": "module-boundaries-results.json",
@@ -40,11 +61,15 @@
   },
   {
    "name": "ui",
+   "localizedUI": true,
    "builds": true,
    "run": "bash scripts/test-ui.sh",
    "result": "ui-results.json",
    "key": "nativeUI",
    "inputs": [
+    "Tools/ax-helper.swift",
+    "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "scripts/test-ui.sh",
     "scripts/test-scenario.sh",
     "scripts/assert-result.py",
@@ -58,6 +83,7 @@
   },
   {
    "name": "startup-settings",
+   "localizedUI": true,
    "run": "python3 scripts/test-startup-settings.py",
    "result": "startup-settings-results.json",
    "key": "startupSettings",
@@ -65,6 +91,7 @@
    "inputs": [
     "Sources/CheckmateApplication/VoiceConnection.swift",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Sources/CheckmateNative/VoiceConsent.swift",
     "scripts/test-startup-settings.py",
     "Tools/ax-helper.swift",
@@ -80,6 +107,7 @@
   },
   {
    "name": "sidebar",
+   "localizedUI": true,
    "run": "python3 scripts/test-sidebar.py",
    "result": "sidebar-results.json",
    "key": "sidebar",
@@ -87,6 +115,7 @@
    "inputs": [
     "scripts/test-sidebar.py",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Tools/ax-helper.swift",
     "Tools/pointer-helper.swift",
     "Sources/CheckmateNative/Helpers.swift",
@@ -110,6 +139,7 @@
   },
   {
    "name": "pointer",
+   "localizedUI": true,
    "run": "CHECKMATE_LESSON_FIXTURE=1 python3 scripts/test-pointer.py",
    "result": "pointer-results.json",
    "key": "pointer",
@@ -131,9 +161,11 @@
     "puzzleReviewDue"
    ],
    "inputs": [
+    "Tools/window-test-helper.swift",
     "scripts/test-pointer.py",
     "scripts/sidebar_lessons.py",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Sources/CheckmateNative/Review*.swift",
     "Sources/CheckmateNative/LibraryTableView.swift",
     "Sources/CheckmateNative/LibraryPreview.swift",
@@ -188,6 +220,7 @@
   },
   {
    "name": "lesson-remediation",
+   "localizedUI": true,
    "key": "lessonRemediation",
    "run": "python3 scripts/test-lesson-remediation.py",
    "result": "lesson-remediation-results.json",
@@ -202,6 +235,7 @@
     "scripts/test-lesson-remediation.py",
     "scripts/sidebar_lessons.py",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Tools/ax-helper.swift",
     "Tools/pointer-helper.swift",
     "Sources/CheckmateNative/BoardView.swift",
@@ -224,6 +258,7 @@
   },
   {
    "name": "lesson-exercise",
+   "localizedUI": true,
    "key": "lessonExercise",
    "run": "python3 scripts/test-lesson-exercise.py",
    "result": "lesson-exercise-results.json",
@@ -244,6 +279,7 @@
     "scripts/test-lesson-exercise.py",
     "scripts/sidebar_lessons.py",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Tools/ax-helper.swift",
     "Tools/pointer-helper.swift",
     "Sources/CheckmateNative/BoardView.swift",
@@ -264,6 +300,7 @@
   },
   {
    "name": "board-clicks",
+   "localizedUI": true,
    "run": "python3 scripts/test-board-clicks.py",
    "result": "board-click-results.json",
    "key": "boardClicks",
@@ -271,6 +308,7 @@
    "inputs": [
     "scripts/test-board-clicks.py",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Tools/board-click-helper.swift",
     "Tools/pointer-helper.swift",
     "Tools/ax-helper.swift",
@@ -309,6 +347,7 @@
    "inputs": [
     "scripts/test-rtl.py",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Tools/board-click-helper.swift",
     "Tools/pointer-helper.swift",
     "Tools/ax-helper.swift",
@@ -319,6 +358,7 @@
   },
   {
    "name": "training-pointer",
+   "localizedUI": true,
    "run": "python3 scripts/test-training-pointer.py",
    "result": "training-pointer-results.json",
    "key": "trainingPointer",
@@ -338,6 +378,7 @@
    "inputs": [
     "scripts/test-training-pointer.py",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Sources/CheckmateDomain/MiniGame*.swift",
     "Sources/CheckmateNative/MiniGameReviewViews.swift",
     "Sources/CheckmateApplication/MiniGameReviewer.swift",
@@ -381,11 +422,13 @@
     "guidedGame",
     "guidedReview",
     "positionGameReview",
-    "lessonLink"
+    "lessonLink",
+    "deepSeekDefault"
    ],
    "inputs": [
     "Sources/CheckmateApplication/VoiceConnection.swift",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Sources/CheckmateNative/VoiceConsent.swift",
     "scripts/test-training-b-pointer.py",
     "Content/calibration/position-game-results.json",
@@ -406,8 +449,14 @@
     "Sources/CheckmateCore/Resources/training-search.js",
     "Sources/CheckmateEngine/*",
     "Sources/CheckmateDomain/Activity.swift",
-    "Sources/CheckmateMacPlatform/VoiceCoach.swift"
-   ]
+    "Sources/CheckmateMacPlatform/VoiceCoach.swift",
+    "Sources/CheckmateNative/DeepSeekAutomation.swift",
+    "Sources/CheckmateNative/DeepSeekCoachViews.swift",
+    "Sources/CheckmateNative/NativeModel.swift",
+    "Sources/CheckmateMacPlatform/DeepSeekCoach.swift",
+    "Sources/CheckmateMacPlatform/ChineseCoachSpeech.swift"
+   ],
+   "localizedUI": true
   },
   {
    "name": "pawn-duel",
@@ -434,16 +483,31 @@
     "Sources/CheckmateNative/MaterialBalance.swift",
     "Sources/CheckmateNative/ContentViews.swift",
     "Sources/CheckmateNative/ControlBar.swift",
-    "Sources/CheckmateNative/MainWindow.swift"
+    "Sources/CheckmateNative/MainWindow.swift",
+    "Sources/CheckmateNative/DeepSeekAutomation.swift",
+    "Sources/CheckmateNative/DeepSeekCoachViews.swift",
+    "Sources/CheckmateNative/NativeModel.swift",
+    "Sources/CheckmateMacPlatform/DeepSeekCoach.swift",
+    "Sources/CheckmateMacPlatform/ChineseCoachSpeech.swift",
+    "scripts/app_driver.py",
+    "Tools/pointer-helper.swift"
+   ],
+   "localizedUI": true,
+   "requires": [
+    "deepSeekDefault"
    ]
   },
   {
    "name": "fullscreen",
+   "localizedUI": true,
    "builds": true,
    "run": "bash scripts/test-fullscreen.sh",
    "result": "fullscreen-results.json",
    "key": "fullscreen",
    "inputs": [
+    "Tools/ax-helper.swift",
+    "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "scripts/test-fullscreen.sh",
     "scripts/test-scenario.sh",
     "scripts/assert-result.py",
@@ -459,11 +523,15 @@
   },
   {
    "name": "layout",
+   "localizedUI": true,
    "builds": true,
    "run": "bash scripts/test-layout.sh",
    "result": "layout-verification.json",
    "key": "layout",
    "inputs": [
+    "Tools/ax-helper.swift",
+    "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "scripts/test-layout.sh",
     "scripts/test-scenario.sh",
     "scripts/assert-result.py",
@@ -484,13 +552,18 @@
   },
   {
    "name": "lifecycle",
+   "localizedUI": true,
    "run": "python3 scripts/test-lifecycle.py",
    "result": "lifecycle-results.json",
    "key": "lifecycle",
    "prebuilt": true,
    "inputs": [
+    "Tools/board-click-helper.swift",
+    "Tools/window-test-helper.swift",
+    "scripts/chinese-startup-acceptance.json",
     "scripts/test-lifecycle.py",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Tools/ax-helper.swift",
     "Sources/CheckmateNative/MainWindow.swift",
     "Sources/CheckmateNative/SettingsWindow.swift",
@@ -532,7 +605,8 @@
    "result": "review-ui-results.json",
    "key": "reviewUI",
    "requires": [
-    "shutdownPersistence"
+    "shutdownPersistence",
+    "deepSeekDefault"
    ],
    "inputs": [
     "Sources/CheckmateApplication/VoiceConnection.swift",
@@ -560,8 +634,15 @@
     "Sources/CheckmateApplication/GameDocument.swift",
     "Sources/CheckmateEngine/Engine.swift",
     "Sources/CheckmateEngine/UCIWorker.swift",
-    "Sources/CheckmateMacPlatform/VoiceCoach.swift"
-   ]
+    "Sources/CheckmateMacPlatform/VoiceCoach.swift",
+    "scripts/ui_locale.py",
+    "scripts/app_driver.py",
+    "Sources/CheckmateNative/DeepSeekAutomation.swift",
+    "Sources/CheckmateNative/DeepSeekCoachViews.swift",
+    "Sources/CheckmateMacPlatform/DeepSeekCoach.swift",
+    "Sources/CheckmateMacPlatform/ChineseCoachSpeech.swift"
+   ],
+   "localizedUI": true
   },
   {
    "name": "network-ui",
@@ -572,6 +653,7 @@
    "inputs": [
     "Sources/CheckmateApplication/VoiceConnection.swift",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "Sources/CheckmateNative/VoiceConsent.swift",
     "scripts/test-network-ui.py",
     "scripts/network_gate.py",
@@ -608,6 +690,7 @@
    "inputs": [
     "scripts/test-network-bonjour.py",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "scripts/automation-identity.sh",
     "scripts/network_gate.py",
     "Tools/pointer-helper.swift",
@@ -641,6 +724,7 @@
    "inputs": [
     "scripts/test-network-lan.py",
     "scripts/app_driver.py",
+    "scripts/ui_locale.py",
     "scripts/automation-identity.sh",
     "Tools/host-access.swift",
     "scripts/network_gate.py",
@@ -702,6 +786,8 @@
     "Tools/kpk_forward.py",
     "Tools/test-kpk-oracle.py",
     "scripts/test-run-gates.py",
+    "scripts/test-ui-locale.py",
+    "scripts/ui_locale.py",
     "scripts/test-fresh-sources.py",
     "scripts/run-gates.py",
     "scripts/clear-notifications.applescript",

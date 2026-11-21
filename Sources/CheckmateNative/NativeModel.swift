@@ -7,6 +7,7 @@ import RealtimeConnection
     let session:GameSession,learning:LearningPlayer,audio:NativeAudio,store:StateStore
     let companion:CompanionBroker,voice:VoiceCoach
     let deepSeekCoach:DeepSeekCoach
+    let deepSeekAutomation:DeepSeekAutomationFixture?
     var deepSeekConsentPending=false
     var askDeepSeekConsent: (@escaping (Bool)->Void)->Void=DeepSeekConsent.ask
     let voicePreview=VoicePreview()
@@ -93,7 +94,11 @@ import RealtimeConnection
         session=try GameSession(engine:engine,state:state,fairness:fairness);review.fairness=fairness;review.analyzer=reviewAnalyzer;reviewRetry=ReviewRetry(review:review,analyzer:reviewAnalyzer);network=try NetworkGameController(services:Self.networkServices(directory:store.directory),participation:fairness.participation,playerName:Self.defaultPlayerName);session.network=network;networkAssistant=NetworkAssistant(game:network,fairness:fairness,engine:engine);learning=try LearningPlayer(session:session);audio=NativeAudio(scores:learning.library.sounds);learning.audio=audio
         training=TrainingRolloutPolicy.enabled ? TrainingController(session:session,learning:learning):nil;training?.games.engine=engine;training?.games.fairness=fairness
         if TrainingRolloutPolicy.trainingVoiceEnabled,let training{trainingVoice=TrainingVoiceAdapter(session:session,controller:training)}else{trainingVoice=nil}
-        companion=try CompanionBroker(session:session,directory:store.directory.appendingPathComponent("companion"));voice=try VoiceCoach(session:session);deepSeekCoach=try DeepSeekCoach(session:session)
+        companion=try CompanionBroker(session:session,directory:store.directory.appendingPathComponent("companion"));voice=try VoiceCoach(session:session)
+        if AppDelegate.isolatedAutomation,ProcessInfo.processInfo.environment["CHECKMATE_DEEPSEEK_FIXTURE"]=="1",state.settings.coachProvider=="deepseek" {
+            let fixture=try DeepSeekAutomationFixture(directory:store.directory);deepSeekAutomation=fixture
+            deepSeekCoach=try DeepSeekCoach(session:session,client:fixture.client,speech:fixture.speech)
+        } else {deepSeekAutomation=nil;deepSeekCoach=try DeepSeekCoach(session:session)}
         usage=UsageLedger(directory:store.directory.appendingPathComponent("Usage"))
         deepSeekCoach.usageLedger=usage;deepSeekCoach.attach(review:review,training:trainingVoice)
         if NativePolicy.silent,ProcessInfo.processInfo.environment["CHECKMATE_LESSON_FIXTURE"]=="1" {

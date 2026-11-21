@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import ui_locale
 
 root = pathlib.Path(__file__).resolve().parents[1]
 HELPERS = ("pointer-helper", "ax-helper", "board-click-helper")
@@ -72,8 +73,22 @@ def without_automation(*also_removed: str) -> dict:
     return {key: value for key, value in os.environ.items() if key not in removed}
 
 
-def launch(command: list, environment: dict, stderr=subprocess.DEVNULL) -> subprocess.Popen:
-    return subprocess.Popen(command, env=environment, stdout=subprocess.DEVNULL, stderr=stderr)
+def launch(command: list, environment: dict, stderr=subprocess.DEVNULL, interactive=True) -> subprocess.Popen:
+    # Chinese is the primary acceptance language. English is explicit comparison.
+    if "-AppleLanguages" not in command:
+        locale = environment.get('CHECKMATE_TEST_LANGUAGE', 'zh-Hans')
+        command = [*command, "-AppleLanguages", f"({locale})", "-AppleLocale", "zh_CN" if locale.startswith('zh') else "en_US"]
+    process = subprocess.Popen(command, env=environment, stdout=subprocess.DEVNULL, stderr=stderr)
+    if interactive and environment.get('CHECKMATE_EVIDENCE_DIR'):
+        ui_locale.expect_instance(environment['CHECKMATE_EVIDENCE_DIR'], process.pid)
+    return process
+
+
+def helper_output(binary, pid, *arguments):
+    raw = subprocess.check_output([str(binary), str(pid), *ui_locale.arguments(arguments)], text=True, timeout=30)
+    if arguments and arguments[0] in {'list', 'list-complete'}:
+        ui_locale.record(pid, raw)
+    return ui_locale.UIText(raw.strip()) if arguments and arguments[0] in {'list', 'list-complete', 'windows', 'label', 'value', 'help'} else raw.strip()
 
 
 def stop(process, timeout: float = 5, kill: bool = False) -> None:
@@ -92,8 +107,11 @@ def stop(process, timeout: float = 5, kill: bool = False) -> None:
 def wait(predicate, message: str, timeout: float = 15, interval: float = 0.2) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if predicate():
-            return
+        try:
+            if predicate():
+                return
+        except ui_locale.LanguageEvidenceMissing:
+            pass  # A startup read may precede menu installation; it is never proof.
         time.sleep(interval)
     raise AssertionError(message)
 
@@ -121,14 +139,14 @@ class App:
 
     def run(self, helper: str, *arguments: str) -> str:
         """One helper call's output, stripped; a helper that fails raises CalledProcessError."""
-        return subprocess.check_output([str(self.helpers[helper]), str(self.process().pid), *arguments], text=True).strip()
+        return helper_output(self.helpers[helper], self.process().pid, *arguments)
 
     def pointer(self, *arguments: str) -> str:
         return self.run("pointer-helper", *arguments)
 
     def listing(self) -> str:
         """The accessibility listing exactly as ax-helper prints it."""
-        return subprocess.check_output([str(self.helpers["ax-helper"]), str(self.process().pid), "list"], text=True)
+        return self.run('ax-helper', 'list')
 
     def label(self, square: str) -> str:
         return self.pointer("label", square)

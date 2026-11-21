@@ -47,9 +47,14 @@ final class BackgroundView:NSView {override func draw(_ rect:NSRect){NativeColor
 /// Hosts scrolling SwiftUI drawer content below the toolbar of a full-height split item. Left to SwiftUI, the
 /// toolbar inset is applied twice there, so its hit-testing containers cover most of every button and toggle
 /// they draw. AppKit's safe-area guide owns the inset instead and SwiftUI sees none.
+final class InspectorHostingView<Content:View>:NSHostingView<Content> {
+    // Interactive inspector drags belong to SwiftUI (for example the review graph),
+    // while the title bar remains the window's drag region.
+    override var mouseDownCanMoveWindow:Bool {false}
+}
 final class ToolbarInsetHostingController<Content:View>:NSViewController {
     let hosting:NSHostingView<Content>
-    init(rootView:Content){hosting=NSHostingView(rootView:rootView);super.init(nibName:nil,bundle:nil)}
+    init(rootView:Content){hosting=InspectorHostingView(rootView:rootView);super.init(nibName:nil,bundle:nil)}
     required init?(coder:NSCoder){fatalError()}
     override func loadView(){
         let container=NSView();hosting.safeAreaRegions=[];hosting.sizingOptions=[];hosting.translatesAutoresizingMaskIntoConstraints=false;container.addSubview(hosting)

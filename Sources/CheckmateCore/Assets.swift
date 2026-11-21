@@ -25,13 +25,29 @@ public enum ChineseContent {
         return catalog.translations
     }()
     private static let phrases = translations.keys.filter{$0.count>=25}.sorted{$0.count==$1.count ? $0<$1:$0.count>$1.count}
+    private static let phraseBytes = phrases.map{($0,Data($0.precomposedStringWithCanonicalMapping.utf8))}
+    private static let minimumPhraseBytes = phraseBytes.map{ $0.1.count }.min() ?? Int.max
+    private static let phrasesNeedASCIILetters = phrases.allSatisfy{phrase in phrase.utf8.contains{(65...90).contains($0) || (97...122).contains($0)}}
+    private static let composedCache:NSCache<NSString,NSString> = {
+        let cache=NSCache<NSString,NSString>();cache.countLimit=1024;cache.totalCostLimit=2*1024*1024;return cache
+    }()
     public static func text(_ source:String,locale:String?=nil)->String {
         let language=locale ?? Bundle.checkmate.preferredLocalizations.first ?? "en"
         guard language.hasPrefix("zh") else{return source}
         if let translated=translations[source]{return translated}
+        if let cached=composedCache.object(forKey:source as NSString){return cached as String}
+        // Already-Chinese list rows cannot contain an English authored phrase.
+        if phrasesNeedASCIILetters,!source.utf8.contains(where:{(65...90).contains($0) || (97...122).contains($0)}){return source}
         // Feedback can combine a localized status with an authored explanation or hint.
-        var result=source
-        for phrase in phrases where result.contains(phrase){result=result.replacingOccurrences(of:phrase,with:translations[phrase]!)}
+        // Compare normalized UTF-8 first: String.contains repeatedly walks Unicode
+        // graphemes for every phrase and can stall a SwiftUI list on the main actor.
+        var result=source,bytes=Data(source.precomposedStringWithCanonicalMapping.utf8)
+        guard bytes.count>=minimumPhraseBytes else{return source}
+        for (phrase,needle) in phraseBytes where bytes.range(of:needle) != nil {
+            result=result.replacingOccurrences(of:phrase,with:translations[phrase]!)
+            bytes=Data(result.precomposedStringWithCanonicalMapping.utf8)
+        }
+        composedCache.setObject(result as NSString,forKey:source as NSString,cost:source.utf8.count+result.utf8.count)
         return result
     }
 }

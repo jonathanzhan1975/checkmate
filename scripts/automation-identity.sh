@@ -53,8 +53,11 @@ extendedKeyUsage = critical,codeSigning
 CONF
   openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -config "$work/cert.conf" -keyout "$work/key.pem" -out "$work/cert.pem" 2>/dev/null
   transfer=$(openssl rand -hex 16)
-  openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" -name "$name" -passout "pass:$transfer" -out "$work/identity.p12" 2>/dev/null \
-    || openssl pkcs12 -export -legacy -inkey "$work/key.pem" -in "$work/cert.pem" -name "$name" -passout "pass:$transfer" -out "$work/identity.p12"
+  # OpenSSL 3's default PKCS12 algorithms are not accepted by every supported
+  # macOS Security import. This is only the private local automation identity.
+  openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" -name "$name" \
+    -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 \
+    -passout "pass:$transfer" -out "$work/identity.p12"
   security create-keychain -p "$(cat "$secret")" "$keychain"
   security set-keychain-settings "$keychain"   # no auto-lock timeout
   unlock
